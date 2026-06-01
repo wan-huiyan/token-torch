@@ -59,8 +59,10 @@ export function ratesForModel(modelId: string): Rates {
 }
 
 export const PRICING_BASIS =
-  "Opus 4.5+ estimate: fresh input $5/M · output $25/M · cache-write $6.25/M · cache-read $0.50/M. " +
-  "Subagents priced flat-Opus (cross-model agents over-counted). Costs are an estimate — the Anthropic billing dashboard is authoritative.";
+  "Per-model estimate (each message priced at its model's list rate): Opus in $5/M · out $25/M; " +
+  "Sonnet $3/$15; Haiku $1/$5; cache-write 1.25× input, cache-read 0.1× input. Costs recomputed from " +
+  "raw-transcript token counts (deduped by message id, top-level usage) — an estimate; the Anthropic " +
+  "billing dashboard is authoritative. Subagents are priced per-model from their own transcripts.";
 
 /** Token counts in a single universe (main-loop, subagent, or combined). */
 export interface TokenSet {
