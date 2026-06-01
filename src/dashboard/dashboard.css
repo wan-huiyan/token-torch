@@ -398,3 +398,6 @@
 .stable-pager button { font-family: var(--mono); font-size: .76rem; color: var(--cyan); background: none;
   border: 1px solid var(--line-soft); border-radius: 7px; padding: 5px 12px; cursor: pointer; }
 .stable-pager button:disabled { color: var(--ink-faint); cursor: default; opacity: .5; }
+
+/* ---- group-by row ---- */
+.gb-row { display: flex; justify-content: flex-end; margin: 18px 0 6px; }
