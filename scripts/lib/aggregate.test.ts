@@ -122,4 +122,40 @@ check("prettyModel, effortLabel, searchSessions, paginate are callable and retur
   void _gb;
 });
 
+// --- searchSessions ---
+check("searchSessions matches id/project/model case-insensitively; empty q passes through", () => {
+  const rows = [
+    row({ id: "abc123", project: "Token-Torch", model: "opus" }),
+    row({ id: "def456", project: "other", model: "haiku" }),
+  ];
+  assert.equal(searchSessions(rows, "").length, 2);
+  assert.equal(searchSessions(rows, "token").length, 1);
+  assert.equal(searchSessions(rows, "HAIKU").length, 1);
+  assert.equal(searchSessions(rows, "zzz").length, 0);
+});
+
+// --- paginate ---
+check("paginate slices, clamps out-of-range pages, reports total pages", () => {
+  const items = Array.from({ length: 25 }, (_, i) => i);
+  const p1 = paginate(items, 1, 10);
+  assert.deepEqual(p1.slice, [0,1,2,3,4,5,6,7,8,9]);
+  assert.equal(p1.pages, 3);
+  const p3 = paginate(items, 3, 10);
+  assert.deepEqual(p3.slice, [20,21,22,23,24]);
+  const over = paginate(items, 99, 10);
+  assert.equal(over.page, 3); // clamped
+  assert.deepEqual(over.slice, [20,21,22,23,24]);
+  const empty = paginate<number>([], 1, 10);
+  assert.equal(empty.pages, 1);
+  assert.deepEqual(empty.slice, []);
+});
+
+// --- prettyModel edge cases ---
+check("prettyModel handles non-standard ids and empties", () => {
+  assert.equal(prettyModel("claude-sonnet-4-5"), "Sonnet 4.5");
+  assert.equal(prettyModel("claude-haiku-4-5-20251001"), "Haiku 4.5");
+  assert.equal(prettyModel("gpt-4o"), "gpt-4o"); // passthrough
+  assert.equal(prettyModel(""), "unknown");
+});
+
 console.log(`\naggregate.ts: ${passed} checks passed`);
