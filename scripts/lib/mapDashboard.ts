@@ -13,6 +13,7 @@ import { round2 } from "./pricing";
 import { deriveEffort, type SettingsFacts } from "./effort";
 import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
+import { computeBurnBands } from "../../src/shared/burnTier";
 
 const SMALL_N_THRESHOLD = 10;
 
@@ -158,6 +159,13 @@ export function mapDashboard(
   // newest-first
   rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
+  // distribution-relative burn-tier bands from the kept-session cost spread
+  // (one ~$361 outlier otherwise collapses every session to the bottom tier).
+  const burnBands = computeBurnBands(rows.map((r) => r.cost_usd));
+  // second pass: every emitted session-detail page gets the GLOBAL cutoffs so a
+  // single-session view still tiers relative to the whole corpus.
+  for (const d of details) d.burn_bands = burnBands;
+
   // ---- totals ----
   const cost_usd = round2(rows.reduce((s, r) => s + r.cost_usd, 0));
   const high = round2(rows.filter((r) => r.fidelity === "high").reduce((s, r) => s + r.cost_usd, 0));
@@ -297,6 +305,7 @@ export function mapDashboard(
       fidelity_note: mainLoopCount
         ? `${mainLoopCount} of ${rows.length} sessions is main-loop-only (subagent spend not counted).`
         : "All sessions are high-fidelity (subagent spend counted).",
+      burn_bands: burnBands,
       floor: {
         discovered: floor.discovered,
         kept: floor.kept,

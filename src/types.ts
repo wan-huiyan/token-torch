@@ -30,6 +30,12 @@ export interface EffortTag {
   confidence: "high" | "low"; // low when an inferred session predates the settings.json mtime cutoff (§7)
 }
 
+/** Distribution-relative burn-tier cutoffs ($), computed at generate-time. */
+export interface BurnBands {
+  campfire: number;
+  inferno: number;
+}
+
 /* ----------------------------- Dashboard ----------------------------------- */
 
 export interface DashboardData {
@@ -43,6 +49,9 @@ export interface DashboardData {
     /** true → do NOT present trend lines as real; show "sample only" state */
     small_n: boolean;
     fidelity_note: string;
+    /** distribution-relative burn-tier cutoffs ($) for the session cards.
+     *  Optional for back-compat with older fixtures (absent → absolute defaults). */
+    burn_bands?: BurnBands;
     /** substance-floor accounting: sessions excluded upstream (count + excluded $).
      *  Surfaced so the headline total's exclusions are never silent. Optional for
      *  back-compat with older fixtures. */
@@ -144,6 +153,9 @@ export interface SessionDetailData {
   model: Model;
   fidelity: Fidelity;
   cache_pct: number;
+  /** GLOBAL distribution-relative burn-tier cutoffs ($) so the single-session
+   *  detail page tiers relative to the whole corpus. Optional for back-compat. */
+  burn_bands?: BurnBands;
 
   time: {
     wall_clock_min: number;

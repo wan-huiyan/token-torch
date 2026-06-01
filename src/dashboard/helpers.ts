@@ -31,12 +31,8 @@ export function splitMoney(v: number): { dollars: number; cents: string } {
   return { dollars, cents };
 }
 
-export type BurnTier = { key: "inferno" | "campfire" | "ember"; name: string; n: number };
-export function burnTier(cost: number): BurnTier {
-  if (cost >= 300) return { key: "inferno", name: "Inferno", n: 3 };
-  if (cost >= 200) return { key: "campfire", name: "Campfire", n: 2 };
-  return { key: "ember", name: "Lil’ Ember", n: 1 };
-}
+export type { BurnTier, BurnBands } from "../shared/burnTier";
+export { burnTier } from "../shared/burnTier";
 
 /* --- markdown: bold (**x**) + "- " bullet lists, matching prototype md() --- */
 function mdInline(s: string): string {
