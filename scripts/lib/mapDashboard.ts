@@ -10,6 +10,8 @@ import type { SessionRecord } from "./ingest";
 import { normalizeProject } from "./projects";
 import { buildFlags, buildInsightsMd } from "./insights";
 import { round2 } from "./pricing";
+import { deriveEffort, type SettingsFacts } from "./effort";
+import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
 
 const SMALL_N_THRESHOLD = 10;
@@ -82,6 +84,7 @@ export function mapDashboard(
   generatedAtIso: string,
   floor: FloorStats,
   projectsDir: string = defaultProjectsDir(),
+  settings: SettingsFacts = { settingsEffort: null, settingsMtimeMs: null },
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
@@ -103,6 +106,17 @@ export function mapDashboard(
     const detail = mapJsonlDetail(rec, fb, shipped);
     const note = ov ? overlayReconciliationNote(ov, detail.cost.total_usd) : undefined;
     if (note) detail.reconciliation_note = note;
+
+    // ---- slice dimensions (Plan 3): compute ONCE, assign to BOTH detail + row ----
+    // (keeping them in lockstep is the L9 trap — a divergent copy passes tests but
+    //  silently disagrees between the table and the drill-down).
+    const { model_version, model_versions } = deriveModelVersion(rec.modelMsgCounts);
+    const effort = deriveEffort({ observedEffort: rec.observedEffort, startedAtMs: rec.startedAtMs }, settings);
+    const data_tier: "enriched" | "jsonl" = overlay.has(rec.id) ? "enriched" : "jsonl";
+    if (model_version) detail.model_version = model_version;
+    detail.effort = effort;
+    detail.data_tier = data_tier;
+
     details.push(detail);
 
     // time-saved accounting + coverage tracking. "Has subagents" = transcripts found.
@@ -132,6 +146,10 @@ export function mapDashboard(
       model: rec.dominantModel,
       fidelity: detail.fidelity,
       ...(note ? { reconciliation_note: note } : {}),
+      ...(model_version ? { model_version } : {}),
+      model_versions,
+      effort,
+      data_tier,
       top_tools: topTools(rec.toolCounts),
       detail_href: `/sessions/${detail.id}`,
     });

@@ -17,7 +17,7 @@
  *   CORPUS_DIR=/path npm run generate
  * ========================================================================== */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, statSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,7 @@ import { ingestSessions, type IngestResult } from "./lib/ingest";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
+import type { SettingsFacts } from "./lib/effort";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -35,6 +36,21 @@ const CORPUS_DIR = process.env.CORPUS_DIR ?? join(homedir(), ".claude", "usage-t
 const OUT_DIR = join(ROOT, "public", "data");
 const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
 const VERIFY = process.argv.includes("--verify");
+
+const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
+
+/** Read the effort default + settings.json mtime ONCE (filesystem boundary kept here,
+ *  so deriveEffort stays pure/testable). Returns nulls when unreadable → effort:"unknown". */
+function readSettingsFacts(): SettingsFacts {
+  try {
+    const effort = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"))?.effortLevel ?? null;
+    const settingsEffort = typeof effort === "string" ? effort : null;
+    const settingsMtimeMs = statSync(SETTINGS_PATH).mtimeMs;
+    return { settingsEffort, settingsMtimeMs };
+  } catch {
+    return { settingsEffort: null, settingsMtimeMs: null };
+  }
+}
 
 function writeJson(path: string, data: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -167,13 +183,21 @@ function main(): void {
   const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
 
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt, {
-    discovered: ingest.discovered,
-    kept: ingest.kept,
-    droppedFloor: ingest.droppedFloor,
-    droppedWithUsage: ingest.droppedWithUsage,
-    droppedWithUsageUsd: ingest.droppedWithUsageUsd,
-  });
+  const settingsFacts = readSettingsFacts();
+  const { dashboard, details, subagentTiming } = mapDashboard(
+    ingest.records,
+    overlay,
+    generatedAt,
+    {
+      discovered: ingest.discovered,
+      kept: ingest.kept,
+      droppedFloor: ingest.droppedFloor,
+      droppedWithUsage: ingest.droppedWithUsage,
+      droppedWithUsageUsd: ingest.droppedWithUsageUsd,
+    },
+    undefined,
+    settingsFacts,
+  );
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
