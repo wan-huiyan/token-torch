@@ -170,6 +170,42 @@ function verify(
       `ℹ ${moved} session(s) differ >5% from their usage-tracking record (expected: JSONL vs cctime extraction differ; see Plan 2 calibration). Not blended.`,
     );
 
+  // ---- Plan 3 slice-dimension coverage (spec §11) ----
+  // (a) every kept session carries an EffortTag; log a source/confidence histogram.
+  const effortHist = { observed: 0, inferred_high: 0, inferred_low: 0, unknown: 0 };
+  for (const s of dashboard.sessions) {
+    if (!s.effort)
+      throw new Error(`[${s.id}] missing effort EffortTag (Plan 3 coverage)`);
+    if (s.effort.source === "observed") effortHist.observed++;
+    else if (s.effort.source === "unknown") effortHist.unknown++;
+    else if (s.effort.confidence === "high") effortHist.inferred_high++;
+    else effortHist.inferred_low++;
+  }
+  checks.push(
+    `✓ effort coverage: all ${dashboard.sessions.length} sessions tagged ` +
+      `(observed ${effortHist.observed}, inferred-high ${effortHist.inferred_high}, ` +
+      `inferred-low ${effortHist.inferred_low}, unknown ${effortHist.unknown})`,
+  );
+
+  // (b) every kept session carries a model_version.
+  const noVersion = dashboard.sessions.filter((s) => !s.model_version);
+  if (noVersion.length)
+    throw new Error(
+      `${noVersion.length} session(s) missing model_version (e.g. ${noVersion[0].id}) (Plan 3 coverage)`,
+    );
+  checks.push(`✓ model_version coverage: all ${dashboard.sessions.length} sessions have a dominant version id`);
+
+  // (c) every kept session carries a data_tier.
+  const noTier = dashboard.sessions.filter((s) => !s.data_tier);
+  if (noTier.length)
+    throw new Error(
+      `${noTier.length} session(s) missing data_tier (e.g. ${noTier[0].id}) (Plan 3 coverage)`,
+    );
+  const enriched = dashboard.sessions.filter((s) => s.data_tier === "enriched").length;
+  checks.push(
+    `✓ data_tier coverage: all ${dashboard.sessions.length} sessions tiered (${enriched} enriched, ${dashboard.sessions.length - enriched} jsonl)`,
+  );
+
   return checks;
 }
 
