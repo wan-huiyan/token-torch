@@ -8,7 +8,7 @@
  * iteration input grossly overcounts). cctime usage-tracking is a reconciliation
  * overlay, never blended.
  * ========================================================================== */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { totalTokens, type TokenSet } from "./pricing";
@@ -185,6 +185,42 @@ function dominantModelLabel(modelMsgCounts: Record<string, number>): string {
   if (lower.includes("sonnet")) return "sonnet";
   if (lower.includes("haiku")) return "haiku";
   return lower;
+}
+
+export interface IngestCache {
+  [path: string]: { mtimeMs: number; size: number; parsed: ParsedTranscript };
+}
+
+export const cacheKeyFor = (path: string): string => path;
+
+/** Parse a session's transcript(s), reusing cached results when every file's
+ *  (mtimeMs, size) is unchanged. Mutates `cache`. `parser` is injected for tests. */
+export function parseWithCache(
+  paths: string[],
+  cache: IngestCache,
+  parser: (paths: string[]) => ParsedTranscript = parseMainTranscript,
+): ParsedTranscript {
+  let allHit = true;
+  for (const p of paths) {
+    let st;
+    try { st = statSync(p); } catch { allHit = false; break; }
+    const e = cache[cacheKeyFor(p)];
+    if (!e || e.mtimeMs !== st.mtimeMs || e.size !== st.size) { allHit = false; break; }
+  }
+  // A multi-file session is cached under its first file's key (carrying the merged parse).
+  const primary = cacheKeyFor(paths[0]);
+  if (allHit && cache[primary]) return cache[primary].parsed;
+
+  const parsed = parser(paths);
+  try {
+    const st = statSync(paths[0]);
+    cache[primary] = { mtimeMs: st.mtimeMs, size: st.size, parsed };
+  } catch { /* unstatable first file — skip caching */ }
+  return parsed;
+}
+
+export function loadCache(cachePath: string): IngestCache {
+  try { return JSON.parse(readFileSync(cachePath, "utf8")) as IngestCache; } catch { return {}; }
 }
 
 /** Assemble a SessionRecord from a parsed transcript + source metadata.
