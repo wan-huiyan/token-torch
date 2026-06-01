@@ -41,6 +41,23 @@ const addInto = (a: TokenSet, b: TokenSet) => {
 };
 const zero = (): TokenSet => ({ fresh_input: 0, output: 0, cache_write: 0, cache_read: 0 });
 
+/** Merge two per-model token maps into a fresh one (used to combine main + subagent). */
+export function mergePerModelTokens(
+  a: Record<string, TokenSet>,
+  b: Record<string, TokenSet>,
+): Record<string, TokenSet> {
+  const out: Record<string, TokenSet> = {};
+  for (const src of [a, b]) for (const [m, t] of Object.entries(src)) { out[m] ??= zero(); addInto(out[m], t); }
+  return out;
+}
+
+/** Collapse a per-model token map to one aggregate TokenSet. */
+export function mergeTokenSets(perModel: Record<string, TokenSet>): TokenSet {
+  const out = zero();
+  for (const t of Object.values(perModel)) addInto(out, t);
+  return out;
+}
+
 export interface ParsedTranscript {
   tokens: TokenSet;                          // aggregate (non-sidechain)
   perModelTokens: Record<string, TokenSet>;  // model id → tokens
@@ -261,7 +278,7 @@ export interface IngestResult {
   discovered: number;  // distinct session uuids with a main transcript
   kept: number;
   droppedFloor: number;
-  droppedIds: string[]; // 8-char ids dropped by the floor (logged, capped)
+  droppedIds: string[]; // 8-char ids dropped by the floor (count is the load-bearing field; ids for optional logging)
 }
 
 const UUID_RE = /^[0-9a-f-]{30,}$/i;

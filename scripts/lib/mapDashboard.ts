@@ -5,7 +5,8 @@
 
 import type { DashboardData, ProjectRow, SessionRow, TimelinePoint, SessionDetailData } from "../../src/types";
 import type { SessionGroup } from "./corpus";
-import { mapSessionDetail, subagentCount, toolCounts, modelOf } from "./mapSessionDetail";
+import { mapJsonlDetail } from "./mapSessionDetail";
+import type { SessionRecord } from "./ingest";
 import { normalizeProject } from "./projects";
 import { buildFlags, buildInsightsMd } from "./insights";
 import { round2 } from "./pricing";
@@ -18,6 +19,31 @@ function topTools(tools: Record<string, number>, n = 4): Record<string, number> 
     Object.entries(tools ?? {})
       .sort((a, b) => b[1] - a[1])
       .slice(0, n),
+  );
+}
+
+/** A cctime/usage-tracking record's own stored $ estimate, whichever schema it has.
+ *  These figures use a DIFFERENT extraction method (and may be stale per the
+ *  pricing lesson) — surfaced as a reconciliation note, never blended in. */
+function overlayEstimateUsd(g: SessionGroup): number | undefined {
+  return (
+    g.c?.cost_estimate_usd?.grand_total ??
+    g.a?.estimatedCostUsd ??
+    g.b?.grand_total?.cost_usd ??
+    undefined
+  );
+}
+
+/** Note when the overlay's stored estimate diverges >5% from the recomputed figure.
+ *  Never blends — states the two use different methods. Undefined when close/absent. */
+function overlayReconciliationNote(g: SessionGroup, recomputedUsd: number): string | undefined {
+  const est = overlayEstimateUsd(g);
+  if (est == null || est <= 0) return undefined;
+  if (Math.abs(est - recomputedUsd) <= 0.05 * recomputedUsd) return undefined;
+  return (
+    `A hand-built usage record for this session estimated $${est.toFixed(2)} (cctime/usage-tracking); ` +
+    `the shown figure ($${recomputedUsd.toFixed(2)}) is recomputed from the raw transcript at per-model rates. ` +
+    `The two use different extraction methods and are not blended.`
   );
 }
 
@@ -42,13 +68,16 @@ export interface GenerateResult {
 }
 
 export function mapDashboard(
-  groups: SessionGroup[],
+  records: SessionRecord[],
+  overlay: Map<string, SessionGroup>,
   generatedAtIso: string,
   projectsDir: string = defaultProjectsDir(),
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
-  const dropped: string[] = []; // session ids with no parseable record
+  // With JSONL-primary ingestion nothing reaches here unparseable (the floor runs
+  // upstream in ingestSessions); kept for the contract + coverage flag plumbing.
+  const dropped: string[] = [];
   let fileCount = 0;
 
   // index subagent transcripts once; per-session timing/cost fallback reads from it.
@@ -58,29 +87,24 @@ export function mapDashboard(
   const covered: string[] = [];
   const timingChecks: SubagentTimingCheck[] = [];
 
-  for (const g of groups) {
-    fileCount += g.fileCount;
-    const fb = extractFromJsonl(g.id, subagentIndex);
-    const shipped = extractShipped(g.id, subagentIndex, fb.subagentTimings);
-    const detail = mapSessionDetail(g, fb, shipped);
-    if (!detail) {
-      // No Schema A or C record we can map. Track it so the drop is VISIBLE
-      // (a dashboard flag below), never silent. JSONL fallback (stubbed) would
-      // otherwise reconstruct these from the raw transcript.
-      dropped.push(g.id);
-      continue;
-    }
+  for (const rec of records) {
+    fileCount += rec.rawProjectDirs.length; // transcripts merged for this session
+    const fb = extractFromJsonl(rec.id, subagentIndex);
+    const shipped = extractShipped(rec.id, subagentIndex, fb.subagentTimings);
+    const ov = overlay.get(rec.id);
+    // build detail first to get the recomputed total, then derive the overlay note.
+    const detail = mapJsonlDetail(rec, fb, shipped);
+    const note = ov ? overlayReconciliationNote(ov, detail.cost.total_usd) : undefined;
+    if (note) (detail as SessionDetailData & { reconciliation_note?: string }).reconciliation_note = note;
     details.push(detail);
 
-    // time-saved accounting + coverage tracking. "Has subagents" = corpus count
-    // OR transcripts found (the corpus sometimes records 0 while transcripts exist),
-    // so `covered` is always a subset.
-    if (subagentCount(g) > 0 || fb.available) sessionsWithSubagents.push(g.id);
+    // time-saved accounting + coverage tracking. "Has subagents" = transcripts found.
     if (fb.available) {
-      covered.push(g.id);
+      sessionsWithSubagents.push(rec.id);
+      covered.push(rec.id);
       timeSavedMin += fb.timeSavedMin;
       timingChecks.push({
-        id: g.id,
+        id: rec.id,
         unionMin: fb.unionMin,
         wallMin: detail.time.wall_clock_min,
         savedMin: fb.timeSavedMin,
@@ -97,13 +121,11 @@ export function mapDashboard(
       active_min: detail.time.active_min,
       idle_min: detail.time.idle_min,
       cache_pct: detail.cache_pct,
-      subagents: subagentCount(g),
-      model: modelOf(g),
+      subagents: fb.subagentTimings.length,
+      model: rec.dominantModel,
       fidelity: detail.fidelity,
-      ...((detail as SessionDetailData & { reconciliation_note?: string }).reconciliation_note
-        ? { reconciliation_note: (detail as SessionDetailData & { reconciliation_note?: string }).reconciliation_note }
-        : {}),
-      top_tools: topTools(toolCounts(g)),
+      ...(note ? { reconciliation_note: note } : {}),
+      top_tools: topTools(rec.toolCounts),
       detail_href: `/sessions/${detail.id}`,
     });
   }
@@ -165,15 +187,14 @@ export function mapDashboard(
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   // ---- distributions ----
+  // model_mix is message-weighted from each record's per-model assistant-message
+  // counts (raw lowercased model ids, e.g. "claude-opus-4-8"); tools_aggregate is
+  // the summed main-loop tool-call counts.
   const modelCounts: Record<string, number> = {};
   const toolsAgg: Record<string, number> = {};
-  for (const g of groups) {
-    if (!g.a && !g.c) continue; // dropped; not represented in distributions
-    // model_mix is message-weighted from Schema A's `models`; Schema C carries no
-    // models dict (its main loop is Opus), so count it as one Opus-weighted unit
-    // by its tool-call volume — approximate, but keeps Opus from being undercounted.
-    for (const [m, n] of Object.entries(g.a?.models ?? {})) modelCounts[m.toLowerCase()] = (modelCounts[m.toLowerCase()] ?? 0) + n;
-    for (const [t, n] of Object.entries(toolCounts(g))) toolsAgg[t] = (toolsAgg[t] ?? 0) + n;
+  for (const rec of records) {
+    for (const [m, n] of Object.entries(rec.modelMsgCounts)) modelCounts[m.toLowerCase()] = (modelCounts[m.toLowerCase()] ?? 0) + n;
+    for (const [t, n] of Object.entries(rec.toolCounts)) toolsAgg[t] = (toolsAgg[t] ?? 0) + n;
   }
   const modelTotal = Object.values(modelCounts).reduce((a, b) => a + b, 0) || 1;
   const model_mix: Record<string, number> = {};

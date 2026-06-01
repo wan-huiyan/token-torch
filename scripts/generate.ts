@@ -1,12 +1,18 @@
 #!/usr/bin/env tsx
 /* ============================================================================
- * TOKEN TORCH data generator.
- *   reads  ~/.claude/usage-tracking/*.json   (corpus; JSONL fallback stubbed)
+ * TOKEN TORCH data generator (JSONL-primary).
+ *   reads  ~/.claude/projects/**\/<session-uuid>.jsonl  (raw transcripts; PRIMARY)
+ *          ~/.claude/usage-tracking/*.json               (cctime overlay; reconcile-only)
  *   writes public/data/dashboard.json
  *          public/data/sessions/<id>.json
  *
+ * Sessions are derived from raw main-loop transcripts (ingestSessions), priced
+ * per-model from deduped top-level usage. The usage-tracking corpus is loaded as
+ * a reconciliation OVERLAY (a session's own stored $ surfaced as a note when it
+ * diverges) — never blended into the figures.
+ *
  * Usage:
- *   npm run generate              # generate from the default corpus
+ *   npm run generate              # generate from the local transcripts
  *   npm run generate -- --verify  # generate + assert the honesty/contract invariants
  *   CORPUS_DIR=/path npm run generate
  * ========================================================================== */
@@ -17,6 +23,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadCorpus } from "./lib/corpus";
+import { ingestSessions } from "./lib/ingest";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
@@ -26,6 +33,7 @@ const ROOT = join(__dirname, "..");
 
 const CORPUS_DIR = process.env.CORPUS_DIR ?? join(homedir(), ".claude", "usage-tracking");
 const OUT_DIR = join(ROOT, "public", "data");
+const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
 const VERIFY = process.argv.includes("--verify");
 
 function writeJson(path: string, data: unknown): void {
@@ -116,20 +124,24 @@ function verify(
 }
 
 function main(): void {
-  const groups = loadCorpus(CORPUS_DIR);
-  if (!groups.length) {
-    console.error(`No corpus records found in ${CORPUS_DIR}. (Set CORPUS_DIR to override.)`);
+  const ingest = ingestSessions(undefined, CACHE_PATH);
+  if (!ingest.records.length) {
+    console.error("No JSONL sessions found under ~/.claude/projects. (Nothing to ingest.)");
     process.exit(1);
   }
+  // cctime/usage-tracking corpus → reconciliation overlay (keyed by 8-char id).
+  const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
+
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, dropped, subagentTiming } = mapDashboard(groups, generatedAt);
+  const { dashboard, details, dropped, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt);
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
 
-  console.log(`Corpus: ${CORPUS_DIR}`);
-  if (dropped.length)
-    console.warn(`⚠ ${dropped.length} session(s) unparsed & flagged: ${dropped.join(", ")}`);
+  console.log(
+    `Ingested: ${ingest.kept}/${ingest.discovered} sessions (floored ${ingest.droppedFloor}: <10 msgs or no usage)`,
+  );
+  console.log(`Overlay: ${overlay.size} cctime/usage-tracking record(s) from ${CORPUS_DIR}`);
   console.log(
     `Wrote dashboard.json (${dashboard.meta.session_count} sessions, ${dashboard.meta.file_count} files, ` +
       `${dashboard.meta.project_count} projects, $${dashboard.totals.cost_usd}) + ${details.length} session files → ${OUT_DIR}`,
@@ -144,7 +156,11 @@ function main(): void {
   );
 
   if (VERIFY) {
-    for (const line of verify(details, dashboard, dropped, groups.length, subagentTiming.checks))
+    // NOTE: the coverage check below still expects session_count + dropped == discovered.
+    // With the upstream substance floor, floored sessions are NOT in `dropped`, so this
+    // throws whenever droppedFloor > 0 (now the norm). Task 10 reworks --verify for
+    // floor accounting; until then, run plain `generate` (no --verify).
+    for (const line of verify(details, dashboard, dropped, ingest.discovered, subagentTiming.checks))
       console.log(line);
   }
 }
