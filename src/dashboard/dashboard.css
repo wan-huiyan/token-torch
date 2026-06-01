@@ -348,3 +348,11 @@
   .tt-dash .conf-bar .hi, .tt-dash .ratio .a, .tt-dash .splitbar .m { background: #444 !important; box-shadow: none !important; }
   .tt-dash .conf-bar .ml, .tt-dash .ratio .i, .tt-dash .splitbar .s { background: #999 !important; }
 }
+
+/* ---- group-by toggle ---- */
+.gbtoggle { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px;
+  background: var(--panel, rgba(255,255,255,.04)); border: 1px solid var(--line-soft); }
+.gbopt { font-family: var(--mono); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-dim); background: none; border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.gbopt.on { color: var(--bg); background: var(--cyan); }
+.gbopt:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
