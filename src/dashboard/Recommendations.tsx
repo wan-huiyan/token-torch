@@ -23,6 +23,11 @@ export function Recommendations({ data }: { data: DashboardData }) {
         {ins ? (
           <div className="insights">
             <div className="ih">◇ what to do next</div>
+            {data.insights_source === "llm" && (
+              <div className="ai-tag" style={{ fontSize: ".72rem", opacity: 0.7, marginBottom: ".3rem" }}>
+                ✨ AI-written · {data.meta.generated_at.slice(0, 10)}
+              </div>
+            )}
             {/* md() only emits <p>/<ul>/<li>/<strong> from a trusted, HTML-escaped string. */}
             <div dangerouslySetInnerHTML={{ __html: ins }} />
           </div>

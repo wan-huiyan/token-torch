@@ -11,9 +11,10 @@
     "typecheck": "tsc --noEmit",
     "generate": "tsx scripts/generate.ts",
     "generate:verify": "tsx scripts/generate.ts --verify",
-    "test": "tsx scripts/lib/pricing.test.ts && tsx scripts/lib/ingest.test.ts && tsx scripts/lib/types-contract.test.ts && tsx scripts/lib/effort.test.ts && tsx scripts/lib/slice.test.ts && tsx scripts/lib/mapDashboard.slice.test.ts && tsx src/shared/mins.test.ts && tsx src/shared/burnTier.test.ts && tsx scripts/lib/aggregate.test.ts"
+    "test": "tsx scripts/lib/pricing.test.ts && tsx scripts/lib/ingest.test.ts && tsx scripts/lib/types-contract.test.ts && tsx scripts/lib/effort.test.ts && tsx scripts/lib/slice.test.ts && tsx scripts/lib/mapDashboard.slice.test.ts && tsx src/shared/mins.test.ts && tsx src/shared/burnTier.test.ts && tsx scripts/lib/aggregate.test.ts && tsx scripts/lib/insightsValidate.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

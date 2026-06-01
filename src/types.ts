@@ -93,6 +93,10 @@ export interface DashboardData {
   };
   flags: Flag[];
   insights_md: string | null; // markdown (bold + "- " bullets); null -> placeholder
+  /** Provenance of `insights_md`: "llm" => model-written at generate time (UI tags it),
+   *  "template" => the hard-coded threshold fallback. Optional + additive: absent on older
+   *  fixtures renders exactly as before (no tag). */
+  insights_source?: "llm" | "template";
   /** OPT-IN plan-% headroom (B2). Present ONLY when a gitignored
    *  scripts/lib/plan.local.json was found at generate-time. Always an
    *  ESTIMATE (plan limits + reset cadence are user-supplied, not authoritative):
