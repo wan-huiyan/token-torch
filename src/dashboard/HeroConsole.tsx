@@ -32,7 +32,13 @@ export function HeroConsole({ data }: { data: DashboardData }) {
   const aPct = span ? (actMin / span) * 100 : 0;
   const iPct = span ? (idleMin / span) * 100 : 0;
 
-  const { dollars, cents } = splitMoney(t.cost_usd);
+  // Headline = COMPLETE spend (displayed + floored usage-bearing). The per-session
+  // list / projects / fidelity bar stay about the displayed (cost_usd) sessions.
+  const completeSpend = t.complete_spend_usd ?? t.cost_usd;
+  const flooredUsd = t.floored_usd ?? 0;
+  const hasFloored = flooredUsd > 0;
+  const shortSessions = data.meta.floor?.dropped_with_usage ?? 0;
+  const { dollars, cents } = splitMoney(completeSpend);
 
   const tk = t.tokens;
   const inTot = tk.input_fresh + tk.cache_read;
@@ -65,9 +71,22 @@ export function HeroConsole({ data }: { data: DashboardData }) {
           <span className="cents">.{cents}</span>
         </div>
         <div className="burned-cap">
-          across <b>{t.sessions} sessions</b> · <b>{data.meta.project_count} projects</b> ·{" "}
-          <b>{usd(t.cost_per_active_min)}</b>/active-min ·{" "}
-          <span style={{ color: "var(--ink-faint)" }}>on a plan, so $ is just FYI</span>
+          {hasFloored ? (
+            <>
+              <b>{usd(completeSpend)}</b> total spend · <b>{usd(t.cost_usd)}</b> across{" "}
+              <b>{t.sessions} listed sessions</b> + <b>{usd(flooredUsd)}</b> from{" "}
+              <b>{shortSessions} short sessions</b> (shown in aggregate only)
+              <br />
+              <b>{data.meta.project_count} projects</b> · <b>{usd(t.cost_per_active_min)}</b>/active-min ·{" "}
+              <span style={{ color: "var(--ink-faint)" }}>on a plan, so $ is just FYI</span>
+            </>
+          ) : (
+            <>
+              across <b>{t.sessions} sessions</b> · <b>{data.meta.project_count} projects</b> ·{" "}
+              <b>{usd(t.cost_per_active_min)}</b>/active-min ·{" "}
+              <span style={{ color: "var(--ink-faint)" }}>on a plan, so $ is just FYI</span>
+            </>
+          )}
         </div>
 
         {/* confidence split bar — HIGH vs MAIN-LOOP (hatched amber) */}
