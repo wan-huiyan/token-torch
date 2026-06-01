@@ -201,6 +201,8 @@ export interface SessionRecord {
   toolCounts: Record<string, number>;
   hasUsage: boolean;
   ccVersion?: string;
+  observedEffort?: string; // /effort marker value, if the transcript had one
+  startedAtMs?: number;    // first event ms — for the effort confidence cutoff (ms precision)
 }
 
 const FLOOR_MIN_ASSISTANT_MSGS = 10;
@@ -224,6 +226,13 @@ function dominantModelLabel(modelMsgCounts: Record<string, number>): string {
 export interface IngestCache {
   [path: string]: { mtimeMs: number; size: number; parsed: ParsedTranscript };
 }
+
+/** On-disk cache envelope. Bump CACHE_VERSION whenever the cached ParsedTranscript
+ *  blob shape changes — a stale cache would silently serve the OLD shape. v2 added
+ *  `observedEffort`; a v1/legacy cache lacking it would downgrade observed sessions
+ *  to inferred_default (an L9-class silent loss), so we discard on mismatch. */
+export const CACHE_VERSION = 2;
+interface CacheFile { version: number; entries: IngestCache; }
 
 export const cacheKeyFor = (path: string): string => path;
 
@@ -253,8 +262,14 @@ export function parseWithCache(
   return parsed;
 }
 
+/** Load the on-disk cache, discarding anything that isn't the current versioned
+ *  envelope (legacy unversioned files included → {} forces a clean re-parse). */
 export function loadCache(cachePath: string): IngestCache {
-  try { return JSON.parse(readFileSync(cachePath, "utf8")) as IngestCache; } catch { return {}; }
+  try {
+    const raw = JSON.parse(readFileSync(cachePath, "utf8")) as Partial<CacheFile>;
+    if (raw && raw.version === CACHE_VERSION && raw.entries) return raw.entries;
+    return {};
+  } catch { return {}; }
 }
 
 /** Assemble a SessionRecord from a parsed transcript + source metadata.
@@ -286,6 +301,8 @@ export function buildSessionRecord(args: {
     toolCounts: parsed.toolCounts,
     hasUsage: tot > 0,
     ccVersion: parsed.ccVersion,
+    ...(parsed.observedEffort ? { observedEffort: parsed.observedEffort } : {}),
+    ...(parsed.timestampsMs.length ? { startedAtMs: parsed.timestampsMs[0] } : {}),
   };
 }
 
@@ -349,7 +366,7 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
   }
 
   if (cachePath) {
-    try { mkdirSync(join(cachePath, ".."), { recursive: true }); writeFileSync(cachePath, JSON.stringify(cache)); } catch { /* cache is best-effort */ }
+    try { mkdirSync(join(cachePath, ".."), { recursive: true }); writeFileSync(cachePath, JSON.stringify({ version: CACHE_VERSION, entries: cache })); } catch { /* cache is best-effort */ }
   }
 
   records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));

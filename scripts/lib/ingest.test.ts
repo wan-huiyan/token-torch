@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, writeFileSync as wf, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir, passesFloor, cacheKeyFor, parseWithCache, type SessionRecord, type IngestCache } from "./ingest";
+import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir, passesFloor, cacheKeyFor, parseWithCache, buildSessionRecord, loadCache, CACHE_VERSION, type SessionRecord, type IngestCache } from "./ingest";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -180,5 +180,41 @@ check("parseMainTranscript ignores assistant-quoted marker text (false-positive 
 });
 
 rmSync(dirE, { recursive: true, force: true });
+
+// --- buildSessionRecord carries observedEffort + startedAtMs from the parse ---
+check("buildSessionRecord copies observedEffort and startedAtMs (first event) from ParsedTranscript", () => {
+  const parsed = parseMainTranscript([
+    writeJsonlE("rec.jsonl", [
+      { type: "user", timestamp: "2026-06-01T09:00:00.000Z",
+        message: { role: "user", content: "<local-command-stdout>Set effort level to max</local-command-stdout>" } },
+      { type: "assistant", timestamp: "2026-06-01T09:00:01.000Z", isSidechain: false,
+        message: { id: "z1", model: "claude-opus-4-8", usage: { input_tokens: 5, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } },
+    ]),
+  ]);
+  const rec = buildSessionRecord({
+    id: "deadbeef", sessionUuid: "deadbeef-uuid", rawProjectDirs: ["d"], decodedProject: "p",
+    projectFn: (x) => x, parsed,
+  });
+  assert.equal(rec.observedEffort, "max");
+  assert.equal(rec.startedAtMs, Date.parse("2026-06-01T09:00:00.000Z")); // first (earliest) event
+  rmSync(dirE, { recursive: true, force: true });
+});
+
+// --- versioned cache: a v0 (legacy) cache file is discarded, not trusted ---
+check("loadCache discards a cache whose version mismatches CACHE_VERSION", () => {
+  const dir3 = join(tmpdir(), "tt-ingest-cachever");
+  mkdirSync(dir3, { recursive: true });
+  const cp = join(dir3, "c.json");
+  // legacy shape: a bare path-keyed map (no version envelope)
+  wf(cp, JSON.stringify({ "/some/path.jsonl": { mtimeMs: 1, size: 2, parsed: { tokens: {}, perModelTokens: {}, modelMsgCounts: {}, toolCounts: {}, assistantMsgCount: 0, timestampsMs: [] } } }));
+  assert.deepEqual(loadCache(cp), {}); // legacy / unversioned → ignored
+
+  // correctly versioned envelope round-trips
+  const entry = { "/p.jsonl": { mtimeMs: 1, size: 2, parsed: parseMainTranscript([]) } };
+  wf(cp, JSON.stringify({ version: CACHE_VERSION, entries: entry }));
+  const loaded = loadCache(cp);
+  assert.ok(loaded["/p.jsonl"]);
+  rmSync(dir3, { recursive: true, force: true });
+});
 
 console.log(`\n${passed} ingest checks passed`);
