@@ -376,3 +376,25 @@
 .grow-bar { height: 8px; border-radius: 5px; background: var(--line-soft); overflow: hidden; margin: 8px 0 6px; }
 .grow-bar > i { display: block; height: 100%; }
 .grow-nums { display: flex; gap: 16px; font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); }
+
+/* ---- session table ---- */
+.stable-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.stable-search { flex: 0 1 320px; font-family: var(--mono); font-size: .82rem; padding: 7px 10px;
+  border-radius: 8px; border: 1px solid var(--line-soft); background: var(--panel, rgba(255,255,255,.03)); color: var(--ink); }
+.stable-count { font-family: var(--mono); font-size: .72rem; color: var(--ink-dim); }
+.stable-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; }
+.stable { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.stable th { text-align: left; font-family: var(--mono); font-size: .66rem; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-faint); padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+.stable th.r, .stable td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.stable td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+.srow { cursor: pointer; }
+.srow:hover, .srow:focus-visible { background: color-mix(in srgb, var(--cyan) 8%, transparent); outline: none; }
+.stable .sp { color: var(--ink); } .stable .sm { font-family: var(--mono); color: var(--ink-dim); }
+.stable .open { color: var(--cyan); text-align: right; }
+.stable-empty { text-align: center; color: var(--ink-dim); padding: 18px; }
+.stable-pager { display: flex; align-items: center; gap: 14px; justify-content: center; margin-top: 12px;
+  font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); }
+.stable-pager button { font-family: var(--mono); font-size: .76rem; color: var(--cyan); background: none;
+  border: 1px solid var(--line-soft); border-radius: 7px; padding: 5px 12px; cursor: pointer; }
+.stable-pager button:disabled { color: var(--ink-faint); cursor: default; opacity: .5; }
