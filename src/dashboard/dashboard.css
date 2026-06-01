@@ -364,3 +364,15 @@
 .dt-jsonl { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, transparent); }
 .dt-thin { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
 .dt-unknown { color: var(--ink-faint); }
+
+/* ---- group rollup (neutral) ---- */
+.grollup { display: grid; gap: 12px; }
+.grow { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px;
+  background: var(--panel, rgba(255,255,255,.03)); }
+.grow-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.grow-label { font-weight: 700; }
+.grow-meta { font-family: var(--mono); font-size: .72rem; color: var(--ink-dim); }
+.grow-illus { color: var(--amber); }
+.grow-bar { height: 8px; border-radius: 5px; background: var(--line-soft); overflow: hidden; margin: 8px 0 6px; }
+.grow-bar > i { display: block; height: 100%; }
+.grow-nums { display: flex; gap: 16px; font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); }
