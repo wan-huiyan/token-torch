@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { buildByCategoryPerModel, totalTokens, type TokenSet } from "./pricing";
 import { normalizeProject } from "./projects";
+import { parseEffortMarker } from "./effort";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
@@ -66,6 +67,7 @@ export interface ParsedTranscript {
   assistantMsgCount: number;                 // deduped, non-sidechain
   timestampsMs: number[];                    // ALL row timestamps, sorted asc
   ccVersion?: string;
+  observedEffort?: string;                   // value from a /effort local-command-stdout marker, if any (last-write-wins)
 }
 
 /** Parse one-or-more transcript files for ONE session (worktree fanout) into raw
@@ -75,6 +77,9 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
   const bestMsg = new Map<string, { usage: RawUsage; model: string; content: unknown }>();
   const timestamps: number[] = [];
   let ccVersion: string | undefined;
+  // /effort marker: keep the value from the latest-timestamped genuine marker (last-write-wins).
+  let observedEffort: string | undefined;
+  let observedEffortTsMs = -Infinity;
 
   for (const p of paths) {
     let text: string;
@@ -83,11 +88,21 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
       if (!line) continue;
       let r: any;
       try { r = JSON.parse(line); } catch { continue; }
+      let rowTsMs = NaN;
       if (typeof r.timestamp === "string") {
         const t = Date.parse(r.timestamp);
-        if (!Number.isNaN(t)) timestamps.push(t);
+        if (!Number.isNaN(t)) { timestamps.push(t); rowTsMs = t; }
       }
       if (typeof r.version === "string" && (!ccVersion || r.version > ccVersion)) ccVersion = r.version;
+      // /effort marker lives in a user message whose content is the raw stdout STRING.
+      // Gate tightly on the local-command-stdout wrapper to dodge assistant-quoted text.
+      if (r.type === "user" && typeof r.message?.content === "string" &&
+          r.message.content.includes("<local-command-stdout>Set effort level to")) {
+        const inner = r.message.content.replace(/^.*<local-command-stdout>/s, "").replace(/<\/local-command-stdout>.*$/s, "");
+        const val = parseEffortMarker(inner);
+        const ts = Number.isNaN(rowTsMs) ? -Infinity : rowTsMs;
+        if (val && ts >= observedEffortTsMs) { observedEffort = val; observedEffortTsMs = ts; }
+      }
       if (r.type !== "assistant" || r.isSidechain) continue;
       const m = r.message;
       if (!m?.id || !m.usage) continue;
@@ -118,6 +133,7 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     assistantMsgCount: bestMsg.size,
     timestampsMs: timestamps.sort((a, b) => a - b),
     ccVersion,
+    ...(observedEffort ? { observedEffort } : {}),
   };
 }
 

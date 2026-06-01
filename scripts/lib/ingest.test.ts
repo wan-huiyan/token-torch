@@ -136,4 +136,49 @@ check("parseWithCache: hit when mtime+size unchanged, miss after edit", () => {
   rmSync(dir2, { recursive: true, force: true });
 });
 
+// --- parseMainTranscript: capture the /effort marker from user local-command-stdout ---
+const dirE = join(tmpdir(), "tt-ingest-effort");
+function writeJsonlE(name: string, rows: object[]) {
+  mkdirSync(dirE, { recursive: true });
+  const p = join(dirE, name);
+  writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  return p;
+}
+
+check("parseMainTranscript captures observedEffort from a local-command-stdout marker", () => {
+  const p = writeJsonlE("eff.jsonl", [
+    { type: "user", timestamp: "2026-06-01T10:00:00.000Z",
+      message: { role: "user", content: "<local-command-stdout>Set effort level to ultracode (this session only): xhigh + dynamic workflow orchestration</local-command-stdout>" } },
+    { type: "assistant", timestamp: "2026-06-01T10:00:01.000Z", isSidechain: false,
+      message: { id: "m1", model: "claude-opus-4-8", usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } },
+  ]);
+  const r = parseMainTranscript([p]);
+  assert.equal(r.observedEffort, "ultracode");
+});
+
+check("parseMainTranscript last-write-wins across multiple markers by timestamp", () => {
+  const p = writeJsonlE("eff2.jsonl", [
+    { type: "user", timestamp: "2026-06-01T10:00:05.000Z",
+      message: { role: "user", content: "<local-command-stdout>Set effort level to high</local-command-stdout>" } },
+    { type: "user", timestamp: "2026-06-01T10:00:01.000Z",
+      message: { role: "user", content: "<local-command-stdout>Set effort level to low</local-command-stdout>" } },
+    { type: "assistant", timestamp: "2026-06-01T10:00:06.000Z", isSidechain: false,
+      message: { id: "m2", model: "claude-opus-4-8", usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } },
+  ]);
+  const r = parseMainTranscript([p]);
+  assert.equal(r.observedEffort, "high"); // 10:00:05 marker beats the 10:00:01 one
+});
+
+check("parseMainTranscript ignores assistant-quoted marker text (false-positive guard)", () => {
+  const p = writeJsonlE("eff3.jsonl", [
+    { type: "assistant", timestamp: "2026-06-01T10:00:00.000Z", isSidechain: false,
+      message: { id: "m3", model: "claude-opus-4-8", usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        content: [{ type: "text", text: "I will Set effort level to ultracode now" }] } },
+  ]);
+  const r = parseMainTranscript([p]);
+  assert.equal(r.observedEffort, undefined); // marker only honored from user local-command-stdout
+});
+
+rmSync(dirE, { recursive: true, force: true });
+
 console.log(`\n${passed} ingest checks passed`);
