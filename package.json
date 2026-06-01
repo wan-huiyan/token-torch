@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "TOKEN TORCH — mission-control dashboard for autonomous Claude Code runs",
+  "description": "TOKEN TORCH — a retrospective analytics dashboard for your Claude Code usage (cost, time, and what shipped), from your own ~/.claude/projects logs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
