@@ -150,6 +150,7 @@ export interface SessionDetailData {
   };
 
   shipped?: Shipped; // optional "what shipped" section
+  reconciliation_note?: string; // ⓘ note when the overlay record disagreed with recomputed cost
 }
 
 export type CostCategory = "fresh_input" | "cache_write" | "cache_read" | "output";
