@@ -28,6 +28,9 @@ import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
 import type { SettingsFacts } from "./lib/effort";
+import { buildInsightsLLM } from "./lib/insightsLlm";
+import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
+import { validateInsightNumbers } from "./lib/insightsValidate";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -35,6 +38,8 @@ const ROOT = join(__dirname, "..");
 const CORPUS_DIR = process.env.CORPUS_DIR ?? join(homedir(), ".claude", "usage-tracking");
 const OUT_DIR = join(ROOT, "public", "data");
 const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
+const INSIGHTS_CACHE_PATH = join(ROOT, ".cache", "insights.json");
+const INSIGHTS_MODEL = "claude-opus-4-8";
 const VERIFY = process.argv.includes("--verify");
 
 const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
@@ -208,10 +213,24 @@ function verify(
     `✓ data_tier coverage: all ${dashboard.sessions.length} sessions tiered (${enriched} enriched, ${dashboard.sessions.length - enriched} jsonl)`,
   );
 
+  // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
+  // must trace to a dashboard-level aggregate (the honesty gate). Template path
+  // (or null) is a no-op pass — templates only emit numbers from the same source.
+  if (dashboard.insights_source === "llm" && dashboard.insights_md) {
+    const { ok, offending } = validateInsightNumbers(dashboard.insights_md, dashboard);
+    if (!ok)
+      throw new Error(
+        `LLM insights cite number(s) absent from the dashboard aggregates: ${offending.join(", ")} — no fabricated number may ship.`,
+      );
+    checks.push(`✓ LLM insights pass the no-fabrication check (every number traces to an aggregate)`);
+  } else {
+    checks.push(`✓ insights are template/none — no-fabrication check is a no-op`);
+  }
+
   return checks;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const ingest = ingestSessions(undefined, CACHE_PATH);
   if (!ingest.records.length) {
     console.error("No JSONL sessions found under ~/.claude/projects. (Nothing to ingest.)");
@@ -222,20 +241,42 @@ function main(): void {
 
   const generatedAt = new Date().toISOString();
   const settingsFacts = readSettingsFacts();
-  const { dashboard, details, subagentTiming } = mapDashboard(
-    ingest.records,
-    overlay,
-    generatedAt,
-    {
-      discovered: ingest.discovered,
-      kept: ingest.kept,
-      droppedFloor: ingest.droppedFloor,
-      droppedWithUsage: ingest.droppedWithUsage,
-      droppedWithUsageUsd: ingest.droppedWithUsageUsd,
-    },
-    undefined,
-    settingsFacts,
-  );
+  const floor = {
+    discovered: ingest.discovered,
+    kept: ingest.kept,
+    droppedFloor: ingest.droppedFloor,
+    droppedWithUsage: ingest.droppedWithUsage,
+    droppedWithUsageUsd: ingest.droppedWithUsageUsd,
+  };
+
+  // First pass: template insights (also the grounding source for the LLM path).
+  const base = mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts);
+
+  // LLM path is gated on the API key — offline/CI generate stays on templates.
+  let llmInsightsMd: string | null = null;
+  if (process.env.ANTHROPIC_API_KEY) {
+    const hash = insightsHash(base.dashboard, INSIGHTS_MODEL);
+    const cached = readInsightsCache(INSIGHTS_CACHE_PATH, hash);
+    if (cached) {
+      llmInsightsMd = cached;
+      console.log("Insights: cache hit (unchanged aggregates) — no API call.");
+    } else {
+      console.log("Insights: generating via Claude (no cache hit)…");
+      llmInsightsMd = await buildInsightsLLM(base.dashboard);
+      if (llmInsightsMd) {
+        writeInsightsCache(INSIGHTS_CACHE_PATH, hash, llmInsightsMd);
+        console.log("Insights: LLM-written + validated; cached.");
+      }
+      // null => buildInsightsLLM already logged the fallback; templates remain.
+    }
+  } else {
+    console.log("Insights: no ANTHROPIC_API_KEY — using template insights.");
+  }
+
+  // Rebuild only if we have validated LLM prose; otherwise reuse the template pass.
+  const { dashboard, details, subagentTiming } = llmInsightsMd
+    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, llmInsightsMd)
+    : base;
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
@@ -264,4 +305,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
