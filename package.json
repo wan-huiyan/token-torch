@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "generate": "tsx scripts/generate.ts",
-    "generate:verify": "tsx scripts/generate.ts --verify"
+    "generate:verify": "tsx scripts/generate.ts --verify",
+    "test": "tsx scripts/lib/pricing.test.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
