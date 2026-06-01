@@ -26,6 +26,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { OPUS_RATES, priceUsd, round2, type Rates, type TokenSet } from "./pricing";
+import { extractUsageTokens } from "./ingest";
 import type { Shipped, ShippedItem } from "../../src/types";
 
 export interface SubagentDispatch {
@@ -42,6 +43,8 @@ export interface JsonlFallbackResult {
   sumMin: number; // serial-equivalent
   fileCount: number;
   available: boolean; // at least one transcript found
+  /** subagent tokens split by the agent's dominant model (Option B per-model pricing). */
+  subagentPerModelTokens: Record<string, TokenSet>;
 }
 
 const EMPTY: JsonlFallbackResult = {
@@ -51,6 +54,7 @@ const EMPTY: JsonlFallbackResult = {
   sumMin: 0,
   fileCount: 0,
   available: false,
+  subagentPerModelTokens: {},
 };
 
 const MS_PER_MIN = 60_000;
@@ -113,6 +117,7 @@ interface AgentParse {
   endMs: number;
   tokens: TokenSet;
   totalTokens: number;
+  model: string; // dominant model id of this agent's kept assistant messages (lowercased)
   firstUserText?: string; // the task prompt handed to the subagent
 }
 
@@ -139,6 +144,7 @@ function parseAgentFile(path: string): AgentParse | null {
   let endMs = -Infinity;
   let firstUserText: string | undefined;
   const usageById = new Map<string, any>();
+  const modelById = new Map<string, string>();
   for (const line of text.split("\n")) {
     if (!line) continue;
     let r: any;
@@ -163,20 +169,30 @@ function parseAgentFile(path: string): AgentParse | null {
       const u = m?.usage;
       if (m?.id && u) {
         const prev = usageById.get(m.id);
-        if (!prev || (u.output_tokens ?? 0) > (prev.output_tokens ?? 0)) usageById.set(m.id, u);
+        if (!prev || (u.output_tokens ?? 0) > (prev.output_tokens ?? 0)) {
+          usageById.set(m.id, u);
+          modelById.set(m.id, (m.model ?? "unknown").toLowerCase());
+        }
       }
     }
   }
   if (startMs === Infinity) return null;
+  // Sum via the shared TOP-level funnel (same arithmetic as before, calibrated)
+  // and tally the dominant model across the deduped messages.
   const tokens: TokenSet = { fresh_input: 0, output: 0, cache_write: 0, cache_read: 0 };
-  for (const u of usageById.values()) {
-    tokens.fresh_input += u.input_tokens ?? 0;
-    tokens.output += u.output_tokens ?? 0;
-    tokens.cache_write += u.cache_creation_input_tokens ?? 0;
-    tokens.cache_read += u.cache_read_input_tokens ?? 0;
+  const modelCount: Record<string, number> = {};
+  for (const [id, u] of usageById) {
+    const t = extractUsageTokens(u);
+    tokens.fresh_input += t.fresh_input;
+    tokens.output += t.output;
+    tokens.cache_write += t.cache_write;
+    tokens.cache_read += t.cache_read;
+    const mdl = modelById.get(id) ?? "unknown";
+    modelCount[mdl] = (modelCount[mdl] ?? 0) + 1;
   }
   const totalTokens = tokens.fresh_input + tokens.output + tokens.cache_write + tokens.cache_read;
-  return { startMs, endMs, tokens, totalTokens, firstUserText };
+  const model = Object.entries(modelCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+  return { startMs, endMs, tokens, totalTokens, model, firstUserText };
 }
 
 function readMeta(agentPath: string): { description?: string; agentType?: string } {
@@ -267,6 +283,8 @@ export function extractFromJsonl(
   const spans: [number, number][] = [];
   let sumMs = 0;
   const subagentTimings: SubagentDispatch[] = [];
+  // per-model subagent tokens over the SAME deduped agent set the cost uses.
+  const subagentPerModelTokens: Record<string, TokenSet> = {};
   for (const { path, parse } of best.values()) {
     spans.push([parse.startMs, parse.endMs]);
     sumMs += parse.endMs - parse.startMs;
@@ -277,6 +295,11 @@ export function extractFromJsonl(
       span_min: round2((parse.endMs - parse.startMs) / MS_PER_MIN),
       description: agentLabel(readMeta(path), parse.firstUserText),
     });
+    const pk = (subagentPerModelTokens[parse.model] ??= { fresh_input: 0, output: 0, cache_write: 0, cache_read: 0 });
+    pk.fresh_input += parse.tokens.fresh_input;
+    pk.output += parse.tokens.output;
+    pk.cache_write += parse.tokens.cache_write;
+    pk.cache_read += parse.tokens.cache_read;
   }
   const union = unionMs(spans);
   return {
@@ -286,6 +309,7 @@ export function extractFromJsonl(
     sumMin: round2(sumMs / MS_PER_MIN),
     fileCount: best.size,
     available: true,
+    subagentPerModelTokens,
   };
 }
 
