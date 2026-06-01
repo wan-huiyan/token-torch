@@ -95,7 +95,7 @@ export function mapDashboard(
     // build detail first to get the recomputed total, then derive the overlay note.
     const detail = mapJsonlDetail(rec, fb, shipped);
     const note = ov ? overlayReconciliationNote(ov, detail.cost.total_usd) : undefined;
-    if (note) (detail as SessionDetailData & { reconciliation_note?: string }).reconciliation_note = note;
+    if (note) detail.reconciliation_note = note;
     details.push(detail);
 
     // time-saved accounting + coverage tracking. "Has subagents" = transcripts found.

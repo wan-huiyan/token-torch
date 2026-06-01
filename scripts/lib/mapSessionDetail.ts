@@ -367,7 +367,6 @@ export function mapJsonlDetail(
   rec: SessionRecord,
   fb?: JsonlFallbackResult,
   shipped?: Shipped,
-  overlayNote?: string,
 ): SessionDetailData {
   const subPerModel = fb?.available ? fb.subagentPerModelTokens : {};
   const combinedPerModel = mergePerModelTokens(rec.perModelTokens, subPerModel);
@@ -420,7 +419,6 @@ export function mapJsonlDetail(
     },
   };
 
-  if (overlayNote) (detail as SessionDetailData & { reconciliation_note?: string }).reconciliation_note = overlayNote;
   if (shipped) detail.shipped = shipped;
   return detail;
 }
