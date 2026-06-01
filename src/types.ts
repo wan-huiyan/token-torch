@@ -9,6 +9,27 @@
 export type Fidelity = "high" | "main_loop";
 export type Model = "opus" | "sonnet" | "haiku" | (string & {});
 
+/* ------------------------- Slice dimensions (Plan 3) ----------------------- */
+
+/** Versioned model identity. OPEN enum (back-compat with `Model`); pricing.ts keeps
+ *  its own CLOSED ModelFamily — these are intentionally separate modules. */
+export type ModelFamily = "opus" | "sonnet" | "haiku" | (string & {});
+export interface ModelVersion {
+  id: string; // raw transcript id, e.g. "claude-opus-4-8"
+  family: ModelFamily; // "opus"
+  label: string; // display, e.g. "Opus 4.8"
+}
+
+/** Effort, with provenance so inference is never passed off as ground truth. */
+export type EffortValue = "low" | "medium" | "high" | "xhigh" | "max" | "ultracode" | "unknown" | (string & {});
+export type EffortSource = "observed" | "inferred_default" | "unknown";
+export interface EffortTag {
+  value: EffortValue;
+  source: EffortSource; // observed = /effort marker in transcript; inferred = config default at session time
+  modifiers?: string[]; // e.g. ["fast"], ["1m"]
+  confidence: "high" | "low"; // low when an inferred session predates the settings.json mtime cutoff (§7)
+}
+
 /* ----------------------------- Dashboard ----------------------------------- */
 
 export interface DashboardData {
@@ -95,6 +116,11 @@ export interface SessionRow {
   model: Model;
   fidelity: Fidelity; // "main_loop" => show amber badge
   reconciliation_note?: string; // optional ⓘ note when records disagreed
+  /** Plan 3 slice dimensions — all optional → additive; old fixtures stay valid. */
+  model_version?: string; // dominant raw version id, e.g. "claude-opus-4-8"
+  model_versions?: Record<string, number>; // per-version assistant-message share (mixed sessions)
+  effort?: EffortTag;
+  data_tier?: "enriched" | "jsonl" | "thin"; // provenance of this row's numbers (drives a badge)
   top_tools: Record<string, number>;
   detail_href: string; // e.g. "sessions/<id>.html" or route "/sessions/:id"
 }
@@ -166,6 +192,10 @@ export interface SessionDetailData {
 
   shipped?: Shipped; // optional "what shipped" section
   reconciliation_note?: string; // ⓘ note when the overlay record disagreed with recomputed cost
+  /** Plan 3 slice dimensions — optional/additive, mirror SessionRow. */
+  model_version?: string;
+  effort?: EffortTag;
+  data_tier?: "enriched" | "jsonl" | "thin";
 }
 
 export type CostCategory = "fresh_input" | "cache_write" | "cache_read" | "output";
