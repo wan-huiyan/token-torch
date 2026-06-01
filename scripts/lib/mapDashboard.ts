@@ -214,6 +214,10 @@ export function mapDashboard(
 
   const totals: DashboardData["totals"] = {
     cost_usd,
+    // Headline total is COMPLETE: displayed (kept) cost + the floored usage-bearing $.
+    // cost_usd stays the displayed-only figure every breakdown invariant keys off.
+    floored_usd: floor.droppedWithUsageUsd,
+    complete_spend_usd: round2(cost_usd + floor.droppedWithUsageUsd),
     cost_by_fidelity: { high, main_loop },
     active_minutes,
     active_hours: round2(active_minutes / 60),
@@ -247,18 +251,17 @@ export function mapDashboard(
   // sessions don't reach this map — surface them here from the threaded floor stats
   // (the headline total excludes them). ADR 0001/0002 honesty-spine invariant.
   if (floor.droppedFloor > 0) {
-    // true total spend = shown (kept) total + the floored-but-usage-bearing $;
-    // no-usage drops contribute $0, so this is the full denominator.
-    const trueTotal = round2(cost_usd + floor.droppedWithUsageUsd);
-    const pct = trueTotal > 0 ? round2((floor.droppedWithUsageUsd / trueTotal) * 100) : 0;
+    // headline total spend = shown (kept) total + the floored-but-usage-bearing $;
+    // no-usage drops contribute $0, so complete_spend_usd is the full denominator.
+    const completeSpend = round2(cost_usd + floor.droppedWithUsageUsd);
+    const pct = completeSpend > 0 ? round2((floor.droppedWithUsageUsd / completeSpend) * 100) : 0;
     flags.unshift({
       level: "warn",
-      title: `${floor.droppedFloor} sessions excluded by the substance floor`,
+      title: `Total spend includes ${floor.droppedWithUsage} short sessions shown only in aggregate`,
       detail:
-        `${floor.droppedFloor} of ${floor.discovered} discovered sessions were excluded by the substance floor ` +
-        `(fewer than 10 assistant messages, or no usage data). ` +
-        `${floor.droppedWithUsage} of them carried minor usage worth ~$${floor.droppedWithUsageUsd.toFixed(2)} ` +
-        `(${pct}% of total spend) — the shown total reflects the ${floor.kept} substantial sessions.`,
+        `Total spend includes ~$${floor.droppedWithUsageUsd.toFixed(2)} (${pct}%) from ${floor.droppedWithUsage} short sessions ` +
+        `(fewer than 10 assistant messages) shown only in aggregate; the ${floor.kept} substantial sessions are listed individually. ` +
+        `(${floor.droppedFloor} of ${floor.discovered} discovered sessions fall below the substance floor; the rest carried no usage.)`,
       metric: "coverage",
     });
   }
