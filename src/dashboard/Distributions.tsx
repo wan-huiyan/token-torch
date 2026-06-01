@@ -1,5 +1,6 @@
 import type { DashboardData } from "../types";
 import { num, pct, useGrowWidth } from "./helpers";
+import { prettyModel } from "./aggregate";
 import { Section } from "./Section";
 
 const COLS = ["var(--cyan)", "var(--lime)", "var(--magenta)", "var(--amber)"];
@@ -58,7 +59,7 @@ export function Distributions({ data }: { data: DashboardData }) {
   // honest about single-model windows (and ready for when the mix actually diversifies)
   const modelCap =
     modelEntries.length <= 1
-      ? `100% ${modelEntries[0]?.[0] ?? "—"} — no model diversity in this window yet.`
+      ? `100% ${prettyModel(modelEntries[0]?.[0] ?? "")} — no model diversity in this window yet.`
       : `${modelEntries.length} models in the mix.`;
 
   return (
@@ -80,14 +81,14 @@ export function Distributions({ data }: { data: DashboardData }) {
             <h4>Model mix</h4>
             <div className="stackbar">
               {modelEntries.map(([k, v], i) => (
-                <Seg key={k} widthPct={v} color={COLS[i % COLS.length]} title={`${k} ${v}%`} />
+                <Seg key={k} widthPct={v} color={COLS[i % COLS.length]} title={`${prettyModel(k)} ${v}%`} />
               ))}
             </div>
             <div className="legend">
               {modelEntries.map(([k, v], i) => (
                 <span key={k}>
                   <b style={{ background: COLS[i % COLS.length] }} />
-                  {k} {pct(v, 0)}
+                  {prettyModel(k)} {pct(v, 0)}
                 </span>
               ))}
             </div>

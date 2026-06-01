@@ -10,6 +10,7 @@ public/data/
 # Keep them out of version control; the committed projects.ts ships generic.
 scripts/lib/projects.local.json
 scripts/lib/projects.local.ts
+scripts/lib/plan.local.json
 
 # local visual-verification artifacts
 .playwright-mcp/
