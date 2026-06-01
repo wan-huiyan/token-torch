@@ -34,12 +34,8 @@ export function fmtDate(iso: string): string {
   });
 }
 
-/** "1h 23m" / "45m" — matches prototype mins(). */
-export function mins(n: number): string {
-  const h = Math.floor(n / 60);
-  const m = Math.round(n % 60);
-  return h ? `${h}h ${m}m` : `${num(n, 0)}m`;
-}
+/** "1h 23m" / "45m" / "12h 0m" — carry-safe; re-exported from the shared pure module. */
+export { mins } from "../shared/mins";
 
 /** UTC generated-at stamp, e.g. "2026-05-29 16:30 UTC". */
 export function fmtStamp(iso: string): string {
