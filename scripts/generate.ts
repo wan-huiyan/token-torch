@@ -1,12 +1,18 @@
 #!/usr/bin/env tsx
 /* ============================================================================
- * TOKEN TORCH data generator.
- *   reads  ~/.claude/usage-tracking/*.json   (corpus; JSONL fallback stubbed)
+ * TOKEN TORCH data generator (JSONL-primary).
+ *   reads  ~/.claude/projects/**\/<session-uuid>.jsonl  (raw transcripts; PRIMARY)
+ *          ~/.claude/usage-tracking/*.json               (cctime overlay; reconcile-only)
  *   writes public/data/dashboard.json
  *          public/data/sessions/<id>.json
  *
+ * Sessions are derived from raw main-loop transcripts (ingestSessions), priced
+ * per-model from deduped top-level usage. The usage-tracking corpus is loaded as
+ * a reconciliation OVERLAY (a session's own stored $ surfaced as a note when it
+ * diverges) — never blended into the figures.
+ *
  * Usage:
- *   npm run generate              # generate from the default corpus
+ *   npm run generate              # generate from the local transcripts
  *   npm run generate -- --verify  # generate + assert the honesty/contract invariants
  *   CORPUS_DIR=/path npm run generate
  * ========================================================================== */
@@ -16,7 +22,8 @@ import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadCorpus } from "./lib/corpus";
+import { loadCorpus, type SessionGroup } from "./lib/corpus";
+import { ingestSessions, type IngestResult } from "./lib/ingest";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
@@ -26,6 +33,7 @@ const ROOT = join(__dirname, "..");
 
 const CORPUS_DIR = process.env.CORPUS_DIR ?? join(homedir(), ".claude", "usage-tracking");
 const OUT_DIR = join(ROOT, "public", "data");
+const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
 const VERIFY = process.argv.includes("--verify");
 
 function writeJson(path: string, data: unknown): void {
@@ -37,9 +45,9 @@ function writeJson(path: string, data: unknown): void {
 function verify(
   details: SessionDetailData[],
   dashboard: DashboardData,
-  dropped: string[],
-  corpusSessionCount: number,
   timingChecks: SubagentTimingCheck[],
+  ingest: IngestResult,
+  overlay: Map<string, SessionGroup>,
 ): string[] {
   const checks: string[] = [];
 
@@ -58,18 +66,20 @@ function verify(
         `time_saved=${dashboard.totals.time_saved_min}m (${dashboard.totals.time_saved_hours}h)`,
     );
 
-  // COVERAGE (the check whose absence let sessions vanish silently): every
-  // distinct corpus session is either emitted or explicitly dropped-and-flagged.
-  if (dashboard.meta.session_count + dropped.length !== corpusSessionCount)
+  // FLOOR ACCOUNTING: every discovered session is either kept or floored — no silent loss.
+  // Under JSONL-primary, `dropped` (unmappable corpus records) is always [] since the
+  // floor runs upstream in ingestSessions; we account for it via droppedFloor instead.
+  if (ingest.kept + ingest.droppedFloor !== ingest.discovered)
     throw new Error(
-      `coverage: ${dashboard.meta.session_count} emitted + ${dropped.length} dropped != ${corpusSessionCount} corpus sessions`,
+      `floor accounting: kept ${ingest.kept} + floored ${ingest.droppedFloor} != discovered ${ingest.discovered}`,
     );
-  const droppedFlagged = dashboard.flags.some((f) => f.metric === "coverage");
-  if (dropped.length && !droppedFlagged)
-    throw new Error(`coverage: ${dropped.length} sessions dropped but no coverage flag emitted`);
+  // The emitted detail records must match the kept sessions.
+  if (details.length !== ingest.kept)
+    throw new Error(
+      `floor accounting: ${details.length} session detail records emitted but ingest.kept=${ingest.kept}`,
+    );
   checks.push(
-    `✓ coverage: ${dashboard.meta.session_count}/${corpusSessionCount} sessions emitted` +
-      (dropped.length ? `, ${dropped.length} dropped + flagged (${dropped.join(", ")})` : `, 0 dropped`),
+    `✓ floor accounting: ${ingest.kept} kept + ${ingest.droppedFloor} floored == ${ingest.discovered} discovered`,
   );
 
   // cost_by_fidelity sums to the grand total.
@@ -112,24 +122,53 @@ function verify(
     }
   }
   checks.push(`✓ ${details.length} session details pass cost/fidelity/interactive/time invariants`);
+  checks.push(
+    `✓ per-model by_category sums to total_usd (check #1) for ${details.filter((d) => d.cost.by_category).length} sessions`,
+  );
+
+  // cctime-transition: log how many JSONL-derived totals differ >5% from the overlay
+  // (expected: different extraction methods and pricing bases; not blended, just surfaced).
+  let moved = 0;
+  for (const d of details) {
+    const ov = overlay.get(d.id);
+    const ccCost =
+      ov?.c?.cost_estimate_usd?.grand_total ?? ov?.a?.estimatedCostUsd ?? ov?.b?.grand_total?.cost_usd;
+    if (ccCost != null && Math.abs(ccCost - d.cost.total_usd) / Math.max(ccCost, 1) > 0.05) moved++;
+  }
+  if (moved)
+    console.log(
+      `ℹ ${moved} session(s) differ >5% from their usage-tracking record (expected: JSONL vs cctime extraction differ; see Plan 2 calibration). Not blended.`,
+    );
+
   return checks;
 }
 
 function main(): void {
-  const groups = loadCorpus(CORPUS_DIR);
-  if (!groups.length) {
-    console.error(`No corpus records found in ${CORPUS_DIR}. (Set CORPUS_DIR to override.)`);
+  const ingest = ingestSessions(undefined, CACHE_PATH);
+  if (!ingest.records.length) {
+    console.error("No JSONL sessions found under ~/.claude/projects. (Nothing to ingest.)");
     process.exit(1);
   }
+  // cctime/usage-tracking corpus → reconciliation overlay (keyed by 8-char id).
+  const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
+
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, dropped, subagentTiming } = mapDashboard(groups, generatedAt);
+  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt, {
+    discovered: ingest.discovered,
+    kept: ingest.kept,
+    droppedFloor: ingest.droppedFloor,
+    droppedWithUsage: ingest.droppedWithUsage,
+    droppedWithUsageUsd: ingest.droppedWithUsageUsd,
+  });
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
 
-  console.log(`Corpus: ${CORPUS_DIR}`);
-  if (dropped.length)
-    console.warn(`⚠ ${dropped.length} session(s) unparsed & flagged: ${dropped.join(", ")}`);
+  console.log(
+    `Ingested: ${ingest.kept}/${ingest.discovered} sessions (floored ${ingest.droppedFloor}: <10 msgs or no usage; ` +
+      `${ingest.droppedWithUsage} of those carried usage worth ~$${ingest.droppedWithUsageUsd})`,
+  );
+  console.log(`Overlay: ${overlay.size} cctime/usage-tracking record(s) from ${CORPUS_DIR}`);
   console.log(
     `Wrote dashboard.json (${dashboard.meta.session_count} sessions, ${dashboard.meta.file_count} files, ` +
       `${dashboard.meta.project_count} projects, $${dashboard.totals.cost_usd}) + ${details.length} session files → ${OUT_DIR}`,
@@ -144,7 +183,7 @@ function main(): void {
   );
 
   if (VERIFY) {
-    for (const line of verify(details, dashboard, dropped, groups.length, subagentTiming.checks))
+    for (const line of verify(details, dashboard, subagentTiming.checks, ingest, overlay))
       console.log(line);
   }
 }
