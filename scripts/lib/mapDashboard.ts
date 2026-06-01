@@ -87,6 +87,10 @@ export function mapDashboard(
   floor: FloorStats,
   projectsDir: string = defaultProjectsDir(),
   settings: SettingsFacts = { settingsEffort: null, settingsMtimeMs: null },
+  /** Pre-computed, already-validated LLM insights markdown. When provided (non-null),
+   *  it replaces the template insights and marks the source "llm". Computed async in
+   *  generate.ts so this function stays sync + pure. Absent/null => template path. */
+  llmInsightsMd: string | null = null,
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
@@ -325,7 +329,8 @@ export function mapDashboard(
       time_split: { active_min: active_minutes, idle_min: idle_minutes },
     },
     flags,
-    insights_md: buildInsightsMd(generatedDate, totals, projects, small_n),
+    insights_md: llmInsightsMd ?? buildInsightsMd(generatedDate, totals, projects, small_n),
+    insights_source: llmInsightsMd ? "llm" : "template",
     plan: loadPlanConfig(rows),
   };
 
