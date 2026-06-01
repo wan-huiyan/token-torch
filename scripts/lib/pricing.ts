@@ -96,7 +96,7 @@ export function priceUsd(t: TokenSet, rates: Rates = OPUS_RATES): number {
 }
 
 export type Category = keyof TokenSet;
-const CATEGORIES: Category[] = ["fresh_input", "cache_write", "cache_read", "output"];
+export const CATEGORIES: Category[] = ["fresh_input", "cache_write", "cache_read", "output"];
 
 export interface CategoryCost {
   tokens: number;
@@ -137,6 +137,50 @@ export function buildByCategory(
       tokens,
       usd: r.usd,
       rate_per_mtok: rates[r.c],
+      tok_pct: round2((tokens / totalTok) * 100),
+      cost_pct: totalUsd ? round2((r.usd / totalUsd) * 100) : 0,
+    };
+  }
+  return { byCategory, totalUsd };
+}
+
+/**
+ * Per-model by_category: each model's tokens priced at its OWN rate, summed per
+ * category. Preserves the invariant `Σ byCategory[c].usd == totalUsd` to the cent
+ * (largest-remainder reconciliation, same as buildByCategory). `rate_per_mtok` is
+ * the token-weighted EFFECTIVE rate for the category (== the single rate when only
+ * one model is present). Unknown model ids fall back to Opus (highest rate).
+ */
+export function buildByCategoryPerModel(
+  perModelTokens: Record<string, TokenSet>,
+): { byCategory: Record<Category, CategoryCost>; totalUsd: number } {
+  // combined tokens per category + precise dollars per category (per-model priced).
+  const combined: TokenSet = { fresh_input: 0, output: 0, cache_write: 0, cache_read: 0 };
+  const preciseUsd: Record<Category, number> = { fresh_input: 0, cache_write: 0, cache_read: 0, output: 0 };
+  for (const [model, toks] of Object.entries(perModelTokens)) {
+    const rates = ratesForModel(model);
+    for (const c of CATEGORIES) {
+      combined[c] += toks[c];
+      preciseUsd[c] += (toks[c] * rates[c]) / 1_000_000;
+    }
+  }
+  const totalTok = totalTokens(combined) || 1;
+  const totalUsd = round2(CATEGORIES.reduce((s, c) => s + preciseUsd[c], 0));
+
+  const rounded = CATEGORIES.map((c) => ({ c, usd: round2(preciseUsd[c]) }));
+  const residual = round2(totalUsd - rounded.reduce((a, r) => a + r.usd, 0));
+  if (residual !== 0) {
+    const largest = rounded.reduce((a, b) => (b.usd > a.usd ? b : a), rounded[0]);
+    largest.usd = round2(largest.usd + residual);
+  }
+
+  const byCategory = {} as Record<Category, CategoryCost>;
+  for (const r of rounded) {
+    const tokens = combined[r.c];
+    byCategory[r.c] = {
+      tokens,
+      usd: r.usd,
+      rate_per_mtok: tokens ? round2((preciseUsd[r.c] / tokens) * 1_000_000) : ratesForModel("opus")[r.c],
       tok_pct: round2((tokens / totalTok) * 100),
       cost_pct: totalUsd ? round2((r.usd / totalUsd) * 100) : 0,
     };
