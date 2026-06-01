@@ -76,6 +76,9 @@ export function HeroConsole({ data }: { data: DashboardData }) {
               <b>{usd(completeSpend)}</b> total spend · <b>{usd(t.cost_usd)}</b> across{" "}
               <b>{t.sessions} listed sessions</b> + <b>{usd(flooredUsd)}</b> from{" "}
               <b>{shortSessions} short sessions</b> (shown in aggregate only)
+              <br />
+              <b>{data.meta.project_count} projects</b> · <b>{usd(t.cost_per_active_min)}</b>/active-min ·{" "}
+              <span style={{ color: "var(--ink-faint)" }}>on a plan, so $ is just FYI</span>
             </>
           ) : (
             <>
