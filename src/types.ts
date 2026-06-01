@@ -34,7 +34,12 @@ export interface DashboardData {
     };
   };
   totals: {
-    cost_usd: number;
+    cost_usd: number; // displayed (kept) sessions only — all per-session/project/fidelity breakdowns key off this
+    /** floored usage-bearing $ excluded from the per-session list (floor.dropped_with_usage_usd).
+     *  Optional for back-compat with older fixtures. */
+    floored_usd?: number;
+    /** complete spend = cost_usd + floored_usd (headline total). Optional for back-compat. */
+    complete_spend_usd?: number;
     cost_by_fidelity: { high: number; main_loop: number }; // sums ~ cost_usd
     active_minutes: number;
     active_hours: number;

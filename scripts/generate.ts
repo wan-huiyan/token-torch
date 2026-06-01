@@ -87,6 +87,20 @@ function verify(
   if (fid !== Math.round(dashboard.totals.cost_usd * 100))
     throw new Error(`cost_by_fidelity sums to $${fid / 100} != totals.cost_usd $${dashboard.totals.cost_usd}`);
 
+  // complete_spend_usd == cost_usd + floored_usd (to the cent). The headline total
+  // is COMPLETE; cost_usd stays the displayed-only figure the breakdowns key off.
+  {
+    const cs = Math.round((dashboard.totals.complete_spend_usd ?? 0) * 100);
+    const expect = Math.round(dashboard.totals.cost_usd * 100) + Math.round((dashboard.totals.floored_usd ?? 0) * 100);
+    if (cs !== expect)
+      throw new Error(
+        `complete_spend_usd $${cs / 100} != cost_usd + floored_usd $${expect / 100}`,
+      );
+    checks.push(
+      `✓ complete_spend_usd $${dashboard.totals.complete_spend_usd} == cost_usd $${dashboard.totals.cost_usd} + floored_usd $${dashboard.totals.floored_usd}`,
+    );
+  }
+
   for (const d of details) {
     // 1. by_category[*].usd sums to total_usd to the cent.
     if (d.cost.by_category) {
