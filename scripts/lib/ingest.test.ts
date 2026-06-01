@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir } from "./ingest";
+import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir, passesFloor, type SessionRecord } from "./ingest";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -92,6 +92,23 @@ check("decodeProjectDir strips worktree suffix and path encoding to base name", 
     "AMC-handover",
   );
   assert.equal(decodeProjectDir("-Users-huiyanwan"), "huiyanwan"); // home catch-all → last segment
+});
+
+const recStub = (over: Partial<SessionRecord>): SessionRecord => ({
+  id: "demo0001", sessionUuid: "demo0001-uuid", date: "2026-05-01", project: "p",
+  rawProjectDirs: ["d"], tokens: { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 },
+  perModelTokens: { "claude-opus-4-8": { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 } },
+  modelMsgCounts: { "claude-opus-4-8": 12 }, dominantModel: "opus", cacheHitPct: 0,
+  wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12, toolCounts: {}, hasUsage: true,
+  ...over,
+});
+
+check("passesFloor: <10 assistant messages dropped", () => {
+  assert.equal(passesFloor(recStub({ assistantMsgCount: 9 })), false);
+  assert.equal(passesFloor(recStub({ assistantMsgCount: 10 })), true);
+});
+check("passesFloor: no usage dropped regardless of message count", () => {
+  assert.equal(passesFloor(recStub({ assistantMsgCount: 50, hasUsage: false })), false);
 });
 
 console.log(`\n${passed} ingest checks passed`);
