@@ -110,6 +110,23 @@ function collectTools(content: unknown, into: Record<string, number>): void {
       into[(b as any).name] = (into[(b as any).name] ?? 0) + 1;
 }
 
+/** Path-encoded project dir → logical base name (pre-alias). Strips the
+ *  `--claude-worktrees-<slug>` suffix and the `-Users-<user>-Documents-` prefix
+ *  encoding, returning the trailing project segment. normalizeProject() applies
+ *  the user's alias map afterward. */
+export function decodeProjectDir(dirName: string): string {
+  let d = dirName.replace(/--claude-worktrees-.*$/i, "");
+  // path-encoded: leading "-" then segments joined by "-". Drop a leading
+  // "-Users-<user>-Documents-" / "-Users-<user>-" prefix; keep the remainder.
+  d = d.replace(/^-Users-[^-]+-Documents-/i, "").replace(/^-Users-[^-]+-?/i, "");
+  if (!d) {
+    // bare "-Users-huiyanwan" → last segment of the original
+    const segs = dirName.replace(/^-/, "").split("-").filter(Boolean);
+    return segs[segs.length - 1] || "unknown";
+  }
+  return d;
+}
+
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 
 export interface DerivedTime { wallClockMin: number; activeMin: number; idleMin: number; }

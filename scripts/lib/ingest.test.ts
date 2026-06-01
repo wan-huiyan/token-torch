@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractUsageTokens, parseMainTranscript, deriveTime } from "./ingest";
+import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir } from "./ingest";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -83,6 +83,15 @@ check("deriveTime: gaps >120s are idle, rest is active; wall = last - first", ()
 check("deriveTime: empty / single timestamp → zeros", () => {
   assert.deepEqual(deriveTime([]), { wallClockMin: 0, activeMin: 0, idleMin: 0 });
   assert.deepEqual(deriveTime([123]), { wallClockMin: 0, activeMin: 0, idleMin: 0 });
+});
+
+check("decodeProjectDir strips worktree suffix and path encoding to base name", () => {
+  assert.equal(decodeProjectDir("-Users-huiyanwan-Documents-claude-retrospectives"), "claude-retrospectives");
+  assert.equal(
+    decodeProjectDir("-Users-huiyanwan-Documents-AMC-handover--claude-worktrees-gifted-dirac-3b05ca"),
+    "AMC-handover",
+  );
+  assert.equal(decodeProjectDir("-Users-huiyanwan"), "huiyanwan"); // home catch-all → last segment
 });
 
 console.log(`\n${passed} ingest checks passed`);
