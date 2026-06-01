@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { writeFileSync, writeFileSync as wf, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir, passesFloor, type SessionRecord } from "./ingest";
+import { extractUsageTokens, parseMainTranscript, deriveTime, decodeProjectDir, passesFloor, cacheKeyFor, parseWithCache, type SessionRecord, type IngestCache } from "./ingest";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -109,6 +109,31 @@ check("passesFloor: <10 assistant messages dropped", () => {
 });
 check("passesFloor: no usage dropped regardless of message count", () => {
   assert.equal(passesFloor(recStub({ assistantMsgCount: 50, hasUsage: false })), false);
+});
+
+check("parseWithCache: hit when mtime+size unchanged, miss after edit", () => {
+  const dir2 = join(tmpdir(), "tt-ingest-cache");
+  mkdirSync(dir2, { recursive: true });
+  const p = join(dir2, "s.jsonl");
+  wf(p, JSON.stringify({ type: "assistant", timestamp: "2026-05-01T10:00:00.000Z",
+    message: { id: "m", model: "claude-opus-4-8", usage: { input_tokens: 5, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }) + "\n");
+  const cache: IngestCache = {};
+  let parses = 0;
+  const parser = (paths: string[]) => { parses++; return parseMainTranscript(paths); };
+
+  parseWithCache([p], cache, parser);
+  assert.equal(parses, 1);                 // cold → parsed
+  parseWithCache([p], cache, parser);
+  assert.equal(parses, 1);                 // warm → cache hit, not re-parsed
+  assert.ok(cache[cacheKeyFor(p)]);        // entry stored
+
+  // mutate the file → size changes → miss
+  wf(p, JSON.stringify({ type: "assistant", timestamp: "2026-05-01T10:00:00.000Z",
+    message: { id: "m", model: "claude-opus-4-8", usage: { input_tokens: 9999, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }) + "\n");
+  const r = parseWithCache([p], cache, parser);
+  assert.equal(parses, 2);                 // changed → re-parsed
+  assert.equal(r.tokens.fresh_input, 9999);
+  rmSync(dir2, { recursive: true, force: true });
 });
 
 console.log(`\n${passed} ingest checks passed`);
