@@ -8,10 +8,11 @@
  * iteration input grossly overcounts). cctime usage-tracking is a reconciliation
  * overlay, never blended.
  * ========================================================================== */
-import { readFileSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { totalTokens, type TokenSet } from "./pricing";
+import { normalizeProject } from "./projects";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
@@ -252,5 +253,65 @@ export function buildSessionRecord(args: {
     toolCounts: parsed.toolCounts,
     hasUsage: tot > 0,
     ccVersion: parsed.ccVersion,
+  };
+}
+
+export interface IngestResult {
+  records: SessionRecord[];
+  discovered: number;  // distinct session uuids with a main transcript
+  kept: number;
+  droppedFloor: number;
+  droppedIds: string[]; // 8-char ids dropped by the floor (logged, capped)
+}
+
+const UUID_RE = /^[0-9a-f-]{30,}$/i;
+
+/** Enumerate + group + parse + floor. Persists the incremental cache. */
+export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: string): IngestResult {
+  // uuid → { paths: string[], dirs: string[] }
+  const byUuid = new Map<string, { paths: string[]; dirs: string[] }>();
+  let projects: string[];
+  try { projects = readdirSync(projectsDir); } catch { return { records: [], discovered: 0, kept: 0, droppedFloor: 0, droppedIds: [] }; }
+  for (const dir of projects) {
+    const dirPath = join(projectsDir, dir);
+    let entries: string[];
+    try { if (!statSync(dirPath).isDirectory()) continue; entries = readdirSync(dirPath); } catch { continue; }
+    for (const fn of entries) {
+      if (!fn.endsWith(".jsonl")) continue;
+      const uuid = fn.slice(0, -6);
+      if (!UUID_RE.test(uuid)) continue;
+      const e = byUuid.get(uuid) ?? { paths: [], dirs: [] };
+      e.paths.push(join(dirPath, fn));
+      e.dirs.push(dir);
+      byUuid.set(uuid, e);
+    }
+  }
+
+  const cache: IngestCache = cachePath ? loadCache(cachePath) : {};
+  const records: SessionRecord[] = [];
+  const droppedIds: string[] = [];
+  for (const [uuid, { paths, dirs }] of byUuid) {
+    const parsed = parseWithCache(paths, cache);
+    // choose the longest decoded project name across the session's worktree dirs
+    const decoded = dirs.map(decodeProjectDir).sort((a, b) => b.length - a.length)[0] ?? "unknown";
+    const rec = buildSessionRecord({
+      id: uuid.slice(0, 8), sessionUuid: uuid, rawProjectDirs: dirs,
+      decodedProject: decoded, projectFn: normalizeProject, parsed,
+    });
+    if (passesFloor(rec)) records.push(rec);
+    else droppedIds.push(rec.id);
+  }
+
+  if (cachePath) {
+    try { mkdirSync(join(cachePath, ".."), { recursive: true }); writeFileSync(cachePath, JSON.stringify(cache)); } catch { /* cache is best-effort */ }
+  }
+
+  records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return {
+    records,
+    discovered: byUuid.size,
+    kept: records.length,
+    droppedFloor: droppedIds.length,
+    droppedIds,
   };
 }
