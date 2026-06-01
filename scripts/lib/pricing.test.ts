@@ -7,8 +7,16 @@ import {
   priceUsd,
   buildByCategory,
   buildByCategoryPerModel,
+  deriveModelRates,
   type Rates,
 } from "./pricing";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const litellmFixture = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "litellm-prices.fixture.json"), "utf8"),
+) as Record<string, Record<string, number>>;
 
 let passed = 0;
 const check = (name: string, fn: () => void) => {
@@ -106,6 +114,34 @@ check("per-model by_category: empty map → zero totals, no crash", () => {
     assert.equal(r.byCategory[c].tokens, 0);
     assert.equal(r.byCategory[c].usd, 0);
   }
+});
+
+// --- B1: derive rates from a (fixture) LiteLLM snapshot, drift-guarded ---
+check("deriveModelRates: snapshot-hit Opus resolves to the matching $5/MTok set", () => {
+  const r = deriveModelRates(litellmFixture);
+  assert.deepEqual(r.opus, { fresh_input: 5, output: 25, cache_write: 6.25, cache_read: 0.5 });
+});
+check("deriveModelRates: drifted snapshot rate is rejected → keeps hardcoded family literal", () => {
+  // fixture sonnet is deliberately 3x the literal → guard must keep MODEL_RATES.sonnet
+  const r = deriveModelRates(litellmFixture);
+  assert.deepEqual(r.sonnet, { fresh_input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 });
+});
+check("deriveModelRates: family absent from snapshot → hardcoded fallback (Haiku)", () => {
+  const r = deriveModelRates(litellmFixture);
+  assert.deepEqual(r.haiku, { fresh_input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 });
+});
+check("deriveModelRates: empty/garbage snapshot → all-hardcoded", () => {
+  assert.deepEqual(deriveModelRates({}), {
+    opus: { fresh_input: 5, output: 25, cache_write: 6.25, cache_read: 0.5 },
+    sonnet: { fresh_input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 },
+    haiku: { fresh_input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 },
+  });
+});
+check("live snapshot keeps the validated headline rates (Opus stays $5/MTok)", () => {
+  // The committed snapshot (real LiteLLM) must match the hardcoded literal — if
+  // upstream drifts, the guard keeps the literal, so this asserts MODEL_RATES, not raw snapshot numbers.
+  assert.equal(MODEL_RATES.opus.fresh_input, 5);
+  assert.equal(ratesForModel("claude-opus-4-8").fresh_input, 5);
 });
 
 console.log(`\n${passed} pricing checks passed`);

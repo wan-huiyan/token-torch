@@ -1,4 +1,4 @@
-import type { DashboardData, SessionRow } from "../types";
+import type { BurnBands, DashboardData, SessionRow } from "../types";
 import { num, usd, pct, fmtDate, burnTier, splitMoney, useGrowWidth } from "./helpers";
 import { Section } from "./Section";
 import { PixelSprite } from "./PixelSprite";
@@ -15,18 +15,18 @@ function MiniFlames({ n }: { n: number }) {
   );
 }
 
-function SessionCard({ s, onOpen }: { s: SessionRow; onOpen: (id: string) => void }) {
+function SessionCard({ s, bands, onOpen }: { s: SessionRow; bands?: BurnBands; onOpen: (id: string) => void }) {
   const total = s.cost_main + s.cost_sub;
   const mPct = total ? (s.cost_main / total) * 100 : 100;
   const sPct = total ? (s.cost_sub / total) * 100 : 0;
   const { dollars, cents } = splitMoney(s.cost_usd);
-  const t = burnTier(s.cost_usd);
+  const t = burnTier(s.cost_usd, bands);
 
   return (
     <button type="button" className="card" data-sid={s.id} onClick={() => onOpen(s.id)}>
       <div className="top">
         <div>
-          <div className={`pj sz-${t.key}`}>
+          <div className={`pj sz-${t.key}`} title="Burn tier is relative to your own usage, not an absolute price.">
             <MiniFlames n={t.n} />
             {t.name}
           </div>
@@ -120,7 +120,7 @@ export function SessionCards({ data, onOpenSession }: { data: DashboardData; onO
               </div>
               <div className="cards">
                 {list.map((s) => (
-                  <SessionCard key={s.id} s={s} onOpen={onOpenSession} />
+                  <SessionCard key={s.id} s={s} bands={data.meta.burn_bands} onOpen={onOpenSession} />
                 ))}
               </div>
             </div>

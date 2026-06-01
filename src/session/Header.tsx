@@ -10,7 +10,7 @@ import { PixelSprite } from "./PixelSprite";
 import { FLM, FLM_PAL, FLM_S } from "./sprites";
 
 export function Header({ data }: { data: SessionDetailData }) {
-  const tier = burnTier(data.cost_usd);
+  const tier = burnTier(data.cost_usd, data.burn_bands);
   const { dollars, cents } = splitMoney(data.cost_usd);
   const dollarsText = useCountUp(dollars, (v) => num(Math.round(v), 0));
   const sub = data.cost.subagent_usd;
@@ -23,7 +23,7 @@ export function Header({ data }: { data: SessionDetailData }) {
 
   return (
     <section className="head">
-      <span className="tier">
+      <span className="tier" title="Burn tier is relative to your own usage, not an absolute price.">
         <span className="hflames">
           <PixelSprite frames={FLM_S} pal={FLM_PAL} scale={2} />
         </span>

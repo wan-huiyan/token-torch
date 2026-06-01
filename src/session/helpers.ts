@@ -34,12 +34,8 @@ export function fmtDate(iso: string): string {
   });
 }
 
-/** "1h 23m" / "45m" — matches prototype mins(). */
-export function mins(n: number): string {
-  const h = Math.floor(n / 60);
-  const m = Math.round(n % 60);
-  return h ? `${h}h ${m}m` : `${num(n, 0)}m`;
-}
+/** "1h 23m" / "45m" / "12h 0m" — carry-safe; re-exported from the shared pure module. */
+export { mins } from "../shared/mins";
 
 /** UTC generated-at stamp, e.g. "2026-05-29 16:30 UTC". */
 export function fmtStamp(iso: string): string {
@@ -55,12 +51,8 @@ export function splitMoney(v: number): { dollars: number; cents: string } {
   return { dollars, cents };
 }
 
-export type BurnTier = { key: "inferno" | "campfire" | "ember"; name: string; n: number };
-export function burnTier(cost: number): BurnTier {
-  if (cost >= 300) return { key: "inferno", name: "Inferno", n: 3 };
-  if (cost >= 200) return { key: "campfire", name: "Campfire", n: 2 };
-  return { key: "ember", name: "Lil’ Ember", n: 1 };
-}
+export type { BurnTier, BurnBands } from "../shared/burnTier";
+export { burnTier } from "../shared/burnTier";
 
 /* ---------------- reduced-motion ---------------- */
 export function usePrefersReducedMotion(): boolean {
