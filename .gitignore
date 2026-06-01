@@ -14,3 +14,6 @@ scripts/lib/projects.local.ts
 # local visual-verification artifacts
 .playwright-mcp/
 tt-*.png
+
+# incremental ingest cache (derived; regenerable)
+.cache/
