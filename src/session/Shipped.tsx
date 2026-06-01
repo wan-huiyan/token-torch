@@ -1,0 +1,131 @@
+/* ============================================================================
+ * Shipped — "what shipped" (a session scoreboard + PRs / reviews / ADRs / skills
+ * / commits). Hidden entirely when data.shipped is absent or has no non-empty
+ * groups (graceful degradation, matches the prototype). The scoreboard band at
+ * the top shows REAL session-level totals (cost/time/tokens/files + group
+ * counts); per-item cost is shown ONLY for reviews, which carry a real meta
+ * cost+time chip. PRs/skills/ADRs/commits never get fabricated cost.
+ * ========================================================================== */
+import type { SessionDetailData, ShippedItem } from "../types";
+import { Section } from "./Section";
+import { abbr, mins, num, usd } from "./helpers";
+
+/** Lime "merged" / amber "opened" / dim fallback PR-status badge. */
+function metaTone(meta?: string): "merged" | "opened" | "neutral" {
+  if (!meta) return "neutral";
+  const m = meta.toLowerCase();
+  if (m.includes("merge")) return "merged";
+  if (m.includes("open")) return "opened";
+  return "neutral";
+}
+
+function Tile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="sb-tile">
+      <div className="sb-tl">{label}</div>
+      <div className="sb-tv" style={accent ? { color: accent } : undefined}>
+        {value}
+      </div>
+      {sub ? <div className="sb-ts">{sub}</div> : null}
+    </div>
+  );
+}
+
+function Scoreboard({ data }: { data: SessionDetailData }) {
+  const sh = data.shipped!;
+  const c = data.cost;
+  const t = data.time;
+  const prs = sh.prs?.length ?? 0;
+  const reviews = sh.reviews?.length ?? 0;
+  const skills = sh.skills?.length ?? 0;
+  return (
+    <div className="scoreboard">
+      <Tile
+        label="cost · est."
+        value={usd(c.total_usd, false)}
+        sub={`${usd(c.main_loop_usd, false)} main · ${usd(c.subagent_usd, false)} sub`}
+        accent="var(--cyan)"
+      />
+      <Tile label="active time" value={mins(t.active_min)} sub={`${mins(t.wall_clock_min)} wall-clock`} accent="var(--lime)" />
+      <Tile label="tokens" value={abbr(data.tokens.total)} sub={`${num(data.cache_pct, 0)}% cache hit`} />
+      {sh.files_touched != null ? <Tile label="files touched" value={num(sh.files_touched)} /> : null}
+      <Tile label="PRs · reviews · skills" value={`${prs} · ${reviews} · ${skills}`} accent="var(--magenta)" />
+    </div>
+  );
+}
+
+function ItemRow({ it, showCost, headline }: { it: ShippedItem; showCost?: boolean; headline?: boolean }) {
+  const tone = metaTone(it.meta);
+  return (
+    <li className={headline ? "headline" : undefined}>
+      <span className="tick">▸</span>
+      <div className="ib">
+        <div className="it">
+          <span className="title">{it.title}</span>
+          {it.ref ? <span className="ref">{it.ref}</span> : null}
+          {/* PR-style status badge (merged/opened) — only when not a cost chip */}
+          {it.meta && !showCost ? <span className={`badge ${tone}`}>{it.meta}</span> : null}
+        </div>
+        {/* reviews carry a REAL per-item cost+time chip */}
+        {it.meta && showCost ? <span className="costchip">{it.meta}</span> : null}
+      </div>
+    </li>
+  );
+}
+
+function Card({
+  title,
+  items,
+  variant,
+  showCost,
+  headline,
+  collapseAfter,
+}: {
+  title: string;
+  items?: ShippedItem[];
+  variant?: string;
+  showCost?: boolean;
+  headline?: boolean;
+  collapseAfter?: number;
+}) {
+  if (!items || !items.length) return null;
+  const visible = collapseAfter && items.length > collapseAfter ? items.slice(0, collapseAfter) : items;
+  const hidden = items.length - visible.length;
+  return (
+    <div className={`panel shipcard${variant ? " " + variant : ""}`}>
+      <h4>
+        {title}
+        <span className="ct">{items.length}</span>
+      </h4>
+      <ul>
+        {visible.map((it, i) => (
+          <ItemRow key={i} it={it} showCost={showCost} headline={headline} />
+        ))}
+      </ul>
+      {hidden > 0 ? <div className="more">+{hidden} more</div> : null}
+    </div>
+  );
+}
+
+export function Shipped({ data }: { data: SessionDetailData }) {
+  const sh = data.shipped;
+  if (!sh) return null;
+  const groups: ShippedItem[][] = [sh.prs, sh.reviews, sh.adrs, sh.skills, sh.commits].filter(
+    (g): g is ShippedItem[] => !!g && g.length > 0
+  );
+  if (!groups.length) return null;
+
+  return (
+    <Section title="What shipped" n="outputs of this run">
+      <Scoreboard data={data} />
+      <div className="shipgrid">
+        {/* PRs are the headline — first + spanning */}
+        <Card title="Pull requests" items={sh.prs} variant="hero" headline />
+        <Card title="Reviews" items={sh.reviews} variant="reviews" showCost />
+        <Card title="ADRs" items={sh.adrs} />
+        <Card title="Skills" items={sh.skills} variant="skills" />
+        <Card title="Commits" items={sh.commits} variant="commits" collapseAfter={6} />
+      </div>
+    </Section>
+  );
+}

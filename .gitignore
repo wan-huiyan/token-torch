@@ -1,0 +1,16 @@
+node_modules
+dist
+*.local
+.DS_Store
+# Generated data — produced by `npm run generate` from the local Claude Code corpus.
+# Personal usage data; never commit.
+public/data/
+
+# Local project-alias overrides — your real (possibly client) project names.
+# Keep them out of version control; the committed projects.ts ships generic.
+scripts/lib/projects.local.json
+scripts/lib/projects.local.ts
+
+# local visual-verification artifacts
+.playwright-mcp/
+tt-*.png
