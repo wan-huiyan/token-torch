@@ -15,10 +15,9 @@ import type { TokenSet } from "./pricing";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
-// Used by deriveTime (Task 3) — kept here so the constant lives next to the parser.
-// Exported with underscore prefix to satisfy noUnusedLocals until Task 3 consumes them.
-export const _MS_PER_MIN = 60_000;
-export const _GAP_IDLE_MS = 120_000; // >120s between events = you-away (idle), not compute
+// Used by deriveTime — kept here so the constants live next to the parser.
+const MS_PER_MIN = 60_000;
+const GAP_IDLE_MS = 120_000; // >120s between events = you-away (idle), not compute
 
 type RawUsage = {
   input_tokens?: number; output_tokens?: number;
@@ -109,4 +108,26 @@ function collectTools(content: unknown, into: Record<string, number>): void {
   for (const b of content)
     if (b && typeof b === "object" && (b as any).type === "tool_use" && (b as any).name)
       into[(b as any).name] = (into[(b as any).name] ?? 0) + 1;
+}
+
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+export interface DerivedTime { wallClockMin: number; activeMin: number; idleMin: number; }
+
+/** Wall = last−first event. Idle = Σ inter-event gaps over 120s. Active = wall−idle.
+ *  Heuristic (the threshold is arbitrary) — same rule the Schema-C path documents. */
+export function deriveTime(timestampsMs: number[]): DerivedTime {
+  if (timestampsMs.length < 2) return { wallClockMin: 0, activeMin: 0, idleMin: 0 };
+  const sorted = [...timestampsMs].sort((a, b) => a - b);
+  const wallMs = sorted[sorted.length - 1] - sorted[0];
+  let idleMs = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i] - sorted[i - 1];
+    if (gap > GAP_IDLE_MS) idleMs += gap;
+  }
+  return {
+    wallClockMin: round2(wallMs / MS_PER_MIN),
+    activeMin: round2((wallMs - idleMs) / MS_PER_MIN),
+    idleMin: round2(idleMs / MS_PER_MIN),
+  };
 }

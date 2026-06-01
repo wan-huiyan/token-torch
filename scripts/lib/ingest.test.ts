@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractUsageTokens, parseMainTranscript } from "./ingest";
+import { extractUsageTokens, parseMainTranscript, deriveTime } from "./ingest";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -69,4 +69,20 @@ check("parseMainTranscript skips isSidechain rows and splits per model", () => {
 });
 
 rmSync(dir, { recursive: true, force: true });
+
+check("deriveTime: gaps >120s are idle, rest is active; wall = last - first", () => {
+  const base = Date.parse("2026-05-01T10:00:00.000Z");
+  const ts = [base, base + 30_000, base + 60_000, base + 60_000 + 600_000, base + 60_000 + 600_000 + 75_000];
+  // 0..60s active (2 gaps of 30s), then a 600s gap (idle), then 75s active → 735s total
+  const t = deriveTime(ts);
+  assert.equal(t.wallClockMin, 12.25);  // 735s total
+  assert.equal(t.idleMin, 10);          // the single 600s gap
+  assert.equal(t.activeMin, 2.25);      // 135s
+});
+
+check("deriveTime: empty / single timestamp → zeros", () => {
+  assert.deepEqual(deriveTime([]), { wallClockMin: 0, activeMin: 0, idleMin: 0 });
+  assert.deepEqual(deriveTime([123]), { wallClockMin: 0, activeMin: 0, idleMin: 0 });
+});
+
 console.log(`\n${passed} ingest checks passed`);
