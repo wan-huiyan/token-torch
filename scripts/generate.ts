@@ -17,7 +17,7 @@
  *   CORPUS_DIR=/path npm run generate
  * ========================================================================== */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, statSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,7 @@ import { ingestSessions, type IngestResult } from "./lib/ingest";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
+import type { SettingsFacts } from "./lib/effort";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -35,6 +36,21 @@ const CORPUS_DIR = process.env.CORPUS_DIR ?? join(homedir(), ".claude", "usage-t
 const OUT_DIR = join(ROOT, "public", "data");
 const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
 const VERIFY = process.argv.includes("--verify");
+
+const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
+
+/** Read the effort default + settings.json mtime ONCE (filesystem boundary kept here,
+ *  so deriveEffort stays pure/testable). Returns nulls when unreadable → effort:"unknown". */
+function readSettingsFacts(): SettingsFacts {
+  try {
+    const effort = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"))?.effortLevel ?? null;
+    const settingsEffort = typeof effort === "string" ? effort : null;
+    const settingsMtimeMs = statSync(SETTINGS_PATH).mtimeMs;
+    return { settingsEffort, settingsMtimeMs };
+  } catch {
+    return { settingsEffort: null, settingsMtimeMs: null };
+  }
+}
 
 function writeJson(path: string, data: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -154,6 +170,44 @@ function verify(
       `ℹ ${moved} session(s) differ >5% from their usage-tracking record (expected: JSONL vs cctime extraction differ; see Plan 2 calibration). Not blended.`,
     );
 
+  // ---- Plan 3 slice-dimension coverage (spec §11) ----
+  // (a) every kept session carries an EffortTag; log a source/confidence histogram.
+  const effortHist = { observed: 0, inferred_high: 0, inferred_low: 0, unknown: 0 };
+  for (const s of dashboard.sessions) {
+    if (!s.effort)
+      throw new Error(`[${s.id}] missing effort EffortTag (Plan 3 coverage)`);
+    if (s.effort.source === "observed") effortHist.observed++;
+    else if (s.effort.source === "unknown") effortHist.unknown++;
+    else if (s.effort.confidence === "high") effortHist.inferred_high++;
+    else effortHist.inferred_low++;
+  }
+  checks.push(
+    `✓ effort coverage: all ${dashboard.sessions.length} sessions tagged ` +
+      `(observed ${effortHist.observed}, inferred-high ${effortHist.inferred_high}, ` +
+      `inferred-low ${effortHist.inferred_low}, unknown ${effortHist.unknown})`,
+  );
+  if (effortHist.observed < 1)
+    throw new Error("no sessions have observed effort — /effort extraction likely broken (Plan 3)");
+
+  // (b) every kept session carries a model_version.
+  const noVersion = dashboard.sessions.filter((s) => !s.model_version);
+  if (noVersion.length)
+    throw new Error(
+      `${noVersion.length} session(s) missing model_version (e.g. ${noVersion[0].id}) (Plan 3 coverage)`,
+    );
+  checks.push(`✓ model_version coverage: all ${dashboard.sessions.length} sessions have a dominant version id`);
+
+  // (c) every kept session carries a data_tier.
+  const noTier = dashboard.sessions.filter((s) => !s.data_tier);
+  if (noTier.length)
+    throw new Error(
+      `${noTier.length} session(s) missing data_tier (e.g. ${noTier[0].id}) (Plan 3 coverage)`,
+    );
+  const enriched = dashboard.sessions.filter((s) => s.data_tier === "enriched").length;
+  checks.push(
+    `✓ data_tier coverage: all ${dashboard.sessions.length} sessions tiered (${enriched} enriched, ${dashboard.sessions.length - enriched} jsonl)`,
+  );
+
   return checks;
 }
 
@@ -167,13 +221,21 @@ function main(): void {
   const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
 
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt, {
-    discovered: ingest.discovered,
-    kept: ingest.kept,
-    droppedFloor: ingest.droppedFloor,
-    droppedWithUsage: ingest.droppedWithUsage,
-    droppedWithUsageUsd: ingest.droppedWithUsageUsd,
-  });
+  const settingsFacts = readSettingsFacts();
+  const { dashboard, details, subagentTiming } = mapDashboard(
+    ingest.records,
+    overlay,
+    generatedAt,
+    {
+      discovered: ingest.discovered,
+      kept: ingest.kept,
+      droppedFloor: ingest.droppedFloor,
+      droppedWithUsage: ingest.droppedWithUsage,
+      droppedWithUsageUsd: ingest.droppedWithUsageUsd,
+    },
+    undefined,
+    settingsFacts,
+  );
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);

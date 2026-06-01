@@ -15,6 +15,12 @@
  * attribution is not in the corpus.
  * ========================================================================== */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
 export interface Rates {
   fresh_input: number;
   output: number;
@@ -32,11 +38,84 @@ export type ModelFamily = "opus" | "sonnet" | "haiku";
  * NOT modeled (per corpus caveat): the 1M-context window (billed at standard
  * per-token rates for current models), fast-mode premium, Opus-4.7+ tokenizer change.
  */
-export const MODEL_RATES: Record<ModelFamily, Rates> = {
+/** Hardcoded $/MTok literal — the drift baseline AND the fallback when the
+ *  bundled LiteLLM snapshot is missing/absent/drifted for a family. */
+const HARDCODED_RATES: Record<ModelFamily, Rates> = {
   opus: { fresh_input: 5.0, output: 25.0, cache_write: 6.25, cache_read: 0.5 },
   sonnet: { fresh_input: 3.0, output: 15.0, cache_write: 3.75, cache_read: 0.3 },
   haiku: { fresh_input: 1.0, output: 5.0, cache_write: 1.25, cache_read: 0.1 },
 };
+
+/** One representative bare LiteLLM key per family (canonical API ids, matching
+ *  what familyOf() resolves). */
+const SNAPSHOT_REP: Record<ModelFamily, string> = {
+  opus: "claude-opus-4-8",
+  sonnet: "claude-sonnet-4-6",
+  haiku: "claude-haiku-4-5",
+};
+
+type LitellmRow = {
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
+  cache_creation_input_token_cost?: number;
+  cache_read_input_token_cost?: number;
+};
+
+/**
+ * Derive per-family $/MTok rates from a LiteLLM snapshot. For each family: read
+ * its representative bare key, convert each per-token cost ×1e6 → round2 → $/MTok.
+ * DRIFT GUARD: if the row is absent, a field is missing, or any derived rate
+ * diverges from the hardcoded literal by > $0.01/MTok, KEEP the hardcoded family
+ * rate (never ship a broken rate source — LiteLLM also lags brand-new models).
+ */
+export function deriveModelRates(
+  snapshot: Record<string, LitellmRow>,
+): Record<ModelFamily, Rates> {
+  const out = {} as Record<ModelFamily, Rates>;
+  for (const fam of Object.keys(HARDCODED_RATES) as ModelFamily[]) {
+    const hc = HARDCODED_RATES[fam];
+    const row = snapshot[SNAPSHOT_REP[fam]];
+    const perMtok = (perTok: number | undefined): number | null =>
+      typeof perTok === "number" ? round2(perTok * 1_000_000) : null;
+    const derived: Rates | null =
+      row && perMtok(row.input_cost_per_token) != null
+        ? {
+            fresh_input: perMtok(row.input_cost_per_token)!,
+            output: perMtok(row.output_cost_per_token) ?? hc.output,
+            cache_write: perMtok(row.cache_creation_input_token_cost) ?? hc.cache_write,
+            cache_read: perMtok(row.cache_read_input_token_cost) ?? hc.cache_read,
+          }
+        : null;
+    const drifted =
+      derived == null ||
+      Math.abs(derived.fresh_input - hc.fresh_input) > 0.01 ||
+      Math.abs(derived.output - hc.output) > 0.01 ||
+      Math.abs(derived.cache_write - hc.cache_write) > 0.01 ||
+      Math.abs(derived.cache_read - hc.cache_read) > 0.01;
+    out[fam] = drifted ? hc : derived!;
+  }
+  return out;
+}
+
+/** Bundled LiteLLM Claude/anthropic snapshot (provenance in
+ *  litellm-prices.provenance.md). Empty object if the B1 fetch was skipped /
+ *  the file is absent → deriveModelRates then yields all-hardcoded rates. */
+function loadLitellmSnapshot(): Record<string, LitellmRow> {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(here, "litellm-prices.json"), "utf8")) as Record<string, LitellmRow>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Per-model $/MTok rates. SOURCE: the bundled LiteLLM snapshot, drift-guarded
+ * against the hardcoded literal (see deriveModelRates). When the snapshot is
+ * absent/drifted the hardcoded literal is used — so the validated headline and
+ * the by_category→total_usd cent-invariant are preserved by construction.
+ */
+export const MODEL_RATES: Record<ModelFamily, Rates> = deriveModelRates(loadLitellmSnapshot());
 
 /** Opus 4.5+ corrected rates, $/MTok. (Kept as a named export for back-compat.) */
 export const OPUS_RATES: Rates = MODEL_RATES.opus;
@@ -60,9 +139,11 @@ export function ratesForModel(modelId: string): Rates {
 
 export const PRICING_BASIS =
   "Per-model estimate (each message priced at its model's list rate): Opus in $5/M · out $25/M; " +
-  "Sonnet $3/$15; Haiku $1/$5; cache-write 1.25× input, cache-read 0.1× input. Costs recomputed from " +
-  "raw-transcript token counts (deduped by message id, top-level usage) — an estimate; the Anthropic " +
-  "billing dashboard is authoritative. Subagents are priced per-model from their own transcripts.";
+  "Sonnet $3/$15; Haiku $1/$5; cache-write 1.25× input, cache-read 0.1× input. Rates are sourced from a " +
+  "bundled LiteLLM price snapshot (litellm-prices.json, see .provenance.md), drift-guarded against a " +
+  "hardcoded fallback. Costs recomputed from raw-transcript token counts (deduped by message id, top-level " +
+  "usage) — an estimate; the Anthropic billing dashboard is authoritative. Subagents are priced per-model " +
+  "from their own transcripts.";
 
 /** Token counts in a single universe (main-loop, subagent, or combined). */
 export interface TokenSet {
@@ -83,8 +164,6 @@ export const addTokens = (a: TokenSet, b: TokenSet): TokenSet => ({
 
 export const totalTokens = (t: TokenSet): number =>
   t.fresh_input + t.output + t.cache_write + t.cache_read;
-
-const round2 = (v: number): number => Math.round(v * 100) / 100;
 
 /** Precise (unrounded) dollar cost of a token set at given rates. */
 export function priceUsd(t: TokenSet, rates: Rates = OPUS_RATES): number {

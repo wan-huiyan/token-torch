@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { buildByCategoryPerModel, totalTokens, type TokenSet } from "./pricing";
 import { normalizeProject } from "./projects";
+import { parseEffortMarker } from "./effort";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
@@ -66,6 +67,7 @@ export interface ParsedTranscript {
   assistantMsgCount: number;                 // deduped, non-sidechain
   timestampsMs: number[];                    // ALL row timestamps, sorted asc
   ccVersion?: string;
+  observedEffort?: string;                   // value from a /effort local-command-stdout marker, if any (last-write-wins)
 }
 
 /** Parse one-or-more transcript files for ONE session (worktree fanout) into raw
@@ -75,6 +77,9 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
   const bestMsg = new Map<string, { usage: RawUsage; model: string; content: unknown }>();
   const timestamps: number[] = [];
   let ccVersion: string | undefined;
+  // /effort marker: keep the value from the latest-timestamped genuine marker (last-write-wins).
+  let observedEffort: string | undefined;
+  let observedEffortTsMs = -Infinity;
 
   for (const p of paths) {
     let text: string;
@@ -83,11 +88,21 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
       if (!line) continue;
       let r: any;
       try { r = JSON.parse(line); } catch { continue; }
+      let rowTsMs = NaN;
       if (typeof r.timestamp === "string") {
         const t = Date.parse(r.timestamp);
-        if (!Number.isNaN(t)) timestamps.push(t);
+        if (!Number.isNaN(t)) { timestamps.push(t); rowTsMs = t; }
       }
       if (typeof r.version === "string" && (!ccVersion || r.version > ccVersion)) ccVersion = r.version;
+      // /effort marker lives in a user message whose content is the raw stdout STRING.
+      // Gate tightly on the local-command-stdout wrapper to dodge assistant-quoted text.
+      if (r.type === "user" && typeof r.message?.content === "string" &&
+          r.message.content.includes("<local-command-stdout>Set effort level to")) {
+        const inner = r.message.content.replace(/^.*<local-command-stdout>/s, "").replace(/<\/local-command-stdout>.*$/s, "");
+        const val = parseEffortMarker(inner);
+        const ts = Number.isNaN(rowTsMs) ? -Infinity : rowTsMs;
+        if (val && ts >= observedEffortTsMs) { observedEffort = val; observedEffortTsMs = ts; }
+      }
       if (r.type !== "assistant" || r.isSidechain) continue;
       const m = r.message;
       if (!m?.id || !m.usage) continue;
@@ -118,6 +133,7 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     assistantMsgCount: bestMsg.size,
     timestampsMs: timestamps.sort((a, b) => a - b),
     ccVersion,
+    ...(observedEffort ? { observedEffort } : {}),
   };
 }
 
@@ -185,6 +201,8 @@ export interface SessionRecord {
   toolCounts: Record<string, number>;
   hasUsage: boolean;
   ccVersion?: string;
+  observedEffort?: string; // /effort marker value, if the transcript had one
+  startedAtMs?: number;    // first event ms — for the effort confidence cutoff (ms precision)
 }
 
 const FLOOR_MIN_ASSISTANT_MSGS = 10;
@@ -208,6 +226,13 @@ function dominantModelLabel(modelMsgCounts: Record<string, number>): string {
 export interface IngestCache {
   [path: string]: { mtimeMs: number; size: number; parsed: ParsedTranscript };
 }
+
+/** On-disk cache envelope. Bump CACHE_VERSION whenever the cached ParsedTranscript
+ *  blob shape changes — a stale cache would silently serve the OLD shape. v2 added
+ *  `observedEffort`; a v1/legacy cache lacking it would downgrade observed sessions
+ *  to inferred_default (an L9-class silent loss), so we discard on mismatch. */
+export const CACHE_VERSION = 2;
+interface CacheFile { version: number; entries: IngestCache; }
 
 export const cacheKeyFor = (path: string): string => path;
 
@@ -237,8 +262,14 @@ export function parseWithCache(
   return parsed;
 }
 
+/** Load the on-disk cache, discarding anything that isn't the current versioned
+ *  envelope (legacy unversioned files included → {} forces a clean re-parse). */
 export function loadCache(cachePath: string): IngestCache {
-  try { return JSON.parse(readFileSync(cachePath, "utf8")) as IngestCache; } catch { return {}; }
+  try {
+    const raw = JSON.parse(readFileSync(cachePath, "utf8")) as Partial<CacheFile>;
+    if (raw && raw.version === CACHE_VERSION && raw.entries) return raw.entries;
+    return {};
+  } catch { return {}; }
 }
 
 /** Assemble a SessionRecord from a parsed transcript + source metadata.
@@ -270,6 +301,8 @@ export function buildSessionRecord(args: {
     toolCounts: parsed.toolCounts,
     hasUsage: tot > 0,
     ccVersion: parsed.ccVersion,
+    ...(parsed.observedEffort ? { observedEffort: parsed.observedEffort } : {}),
+    ...(parsed.timestampsMs.length ? { startedAtMs: parsed.timestampsMs[0] } : {}),
   };
 }
 
@@ -333,7 +366,7 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
   }
 
   if (cachePath) {
-    try { mkdirSync(join(cachePath, ".."), { recursive: true }); writeFileSync(cachePath, JSON.stringify(cache)); } catch { /* cache is best-effort */ }
+    try { mkdirSync(join(cachePath, ".."), { recursive: true }); writeFileSync(cachePath, JSON.stringify({ version: CACHE_VERSION, entries: cache })); } catch { /* cache is best-effort */ }
   }
 
   records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
