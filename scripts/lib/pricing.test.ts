@@ -5,6 +5,8 @@ import {
   ratesForModel,
   familyOf,
   priceUsd,
+  buildByCategory,
+  buildByCategoryPerModel,
   type Rates,
 } from "./pricing";
 
@@ -62,6 +64,48 @@ check("1M output tokens cost less on sonnet/haiku than opus", () => {
   assert.equal(priceUsd(oneM, ratesForModel("claude-opus-4-8")), 25);
   assert.equal(priceUsd(oneM, ratesForModel("claude-sonnet-4-6")), 15);
   assert.equal(priceUsd(oneM, ratesForModel("claude-haiku-4-5-20251001")), 5);
+});
+
+const MR = MODEL_RATES;
+
+check("per-model by_category: single model equals flat buildByCategory", () => {
+  const toks = { fresh_input: 100_000, output: 50_000, cache_write: 200_000, cache_read: 9_000_000 };
+  const flat = buildByCategory(toks, MR.opus);
+  const perModel = buildByCategoryPerModel({ "claude-opus-4-8": toks });
+  assert.equal(perModel.totalUsd, flat.totalUsd);
+  for (const c of ["fresh_input", "cache_write", "cache_read", "output"] as const)
+    assert.equal(perModel.byCategory[c].usd, flat.byCategory[c].usd);
+});
+
+check("per-model by_category: mixed models price each at its own rate and sum to total", () => {
+  const opusTok = { fresh_input: 1_000_000, output: 0, cache_write: 0, cache_read: 0 }; // $5
+  const haikuTok = { fresh_input: 1_000_000, output: 0, cache_write: 0, cache_read: 0 }; // $1
+  const { byCategory, totalUsd } = buildByCategoryPerModel({
+    "claude-opus-4-8": opusTok,
+    "claude-haiku-4-5": haikuTok,
+  });
+  assert.equal(totalUsd, 6); // 5 + 1
+  assert.equal(byCategory.fresh_input.tokens, 2_000_000);
+  assert.equal(byCategory.fresh_input.usd, 6);
+  // effective rate is token-weighted: $6 / 2M = $3/M
+  assert.equal(byCategory.fresh_input.rate_per_mtok, 3);
+  const sum = Math.round(Object.values(byCategory).reduce((s, c) => s + c.usd, 0) * 100);
+  assert.equal(sum, Math.round(totalUsd * 100));
+});
+
+check("per-model by_category: unknown model priced at Opus (conservative)", () => {
+  const toks = { fresh_input: 1_000_000, output: 0, cache_write: 0, cache_read: 0 };
+  const r = buildByCategoryPerModel({ "mystery-model": toks });
+  assert.equal(r.totalUsd, 5); // opus fallback
+});
+
+check("per-model by_category: empty map → zero totals, no crash", () => {
+  const r = buildByCategoryPerModel({});
+  assert.equal(r.totalUsd, 0);
+  for (const c of ["fresh_input", "cache_write", "cache_read", "output"] as const) {
+    assert.equal(r.byCategory[c].tokens, 0);
+    assert.equal(r.byCategory[c].usd, 0);
+  }
 });
 
 console.log(`\n${passed} pricing checks passed`);
