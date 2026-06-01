@@ -186,6 +186,8 @@ function verify(
       `(observed ${effortHist.observed}, inferred-high ${effortHist.inferred_high}, ` +
       `inferred-low ${effortHist.inferred_low}, unknown ${effortHist.unknown})`,
   );
+  if (effortHist.observed < 1)
+    throw new Error("no sessions have observed effort — /effort extraction likely broken (Plan 3)");
 
   // (b) every kept session carries a model_version.
   const noVersion = dashboard.sessions.filter((s) => !s.model_version);
