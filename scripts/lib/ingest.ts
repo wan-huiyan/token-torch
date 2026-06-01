@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { TokenSet } from "./pricing";
+import { totalTokens, type TokenSet } from "./pricing";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
@@ -146,5 +146,75 @@ export function deriveTime(timestampsMs: number[]): DerivedTime {
     wallClockMin: round2(wallMs / MS_PER_MIN),
     activeMin: round2((wallMs - idleMs) / MS_PER_MIN),
     idleMin: round2(idleMs / MS_PER_MIN),
+  };
+}
+
+export interface SessionRecord {
+  id: string;                 // 8-char
+  sessionUuid: string;
+  date: string;               // ISO date (from first event)
+  project: string;            // logical (decoded + normalizeProject)
+  rawProjectDirs: string[];   // source dirs (worktree fanout)
+  tokens: TokenSet;           // aggregate
+  perModelTokens: Record<string, TokenSet>;
+  modelMsgCounts: Record<string, number>;
+  dominantModel: string;      // family-ish label for the existing `model` field ("opus"/"sonnet"/"haiku"/raw)
+  cacheHitPct: number;        // 0–100
+  wallClockMin: number;
+  activeMin: number;
+  idleMin: number;
+  assistantMsgCount: number;
+  toolCounts: Record<string, number>;
+  hasUsage: boolean;
+  ccVersion?: string;
+}
+
+const FLOOR_MIN_ASSISTANT_MSGS = 10;
+
+/** Substance floor: keep only sessions with real activity AND usage data. */
+export function passesFloor(r: SessionRecord): boolean {
+  return r.hasUsage && r.assistantMsgCount >= FLOOR_MIN_ASSISTANT_MSGS;
+}
+
+function dominantModelLabel(modelMsgCounts: Record<string, number>): string {
+  let best = "opus", bestN = -1;
+  for (const [m, n] of Object.entries(modelMsgCounts)) if (n > bestN) { bestN = n; best = m; }
+  // collapse to family label for the existing `model` field; keep raw if unknown family
+  const lower = best.toLowerCase();
+  if (lower.includes("opus")) return "opus";
+  if (lower.includes("sonnet")) return "sonnet";
+  if (lower.includes("haiku")) return "haiku";
+  return lower;
+}
+
+/** Assemble a SessionRecord from a parsed transcript + source metadata.
+ *  `projectFn` is normalizeProject (injected to avoid a cycle in tests). */
+export function buildSessionRecord(args: {
+  id: string; sessionUuid: string; rawProjectDirs: string[]; decodedProject: string;
+  projectFn: (raw: string) => string; parsed: ParsedTranscript;
+}): SessionRecord {
+  const { id, sessionUuid, rawProjectDirs, decodedProject, projectFn, parsed } = args;
+  const t = deriveTime(parsed.timestampsMs);
+  const tot = totalTokens(parsed.tokens);
+  const cacheHitPct = tot ? round2((parsed.tokens.cache_read / tot) * 100) : 0;
+  const date = parsed.timestampsMs.length
+    ? new Date(parsed.timestampsMs[0]).toISOString().slice(0, 10)
+    : "";
+  return {
+    id, sessionUuid, date,
+    project: projectFn(decodedProject),
+    rawProjectDirs,
+    tokens: parsed.tokens,
+    perModelTokens: parsed.perModelTokens,
+    modelMsgCounts: parsed.modelMsgCounts,
+    dominantModel: dominantModelLabel(parsed.modelMsgCounts),
+    cacheHitPct,
+    wallClockMin: t.wallClockMin,
+    activeMin: t.activeMin,
+    idleMin: t.idleMin,
+    assistantMsgCount: parsed.assistantMsgCount,
+    toolCounts: parsed.toolCounts,
+    hasUsage: tot > 0,
+    ccVersion: parsed.ccVersion,
   };
 }
