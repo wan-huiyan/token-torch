@@ -19,6 +19,7 @@ import { StatStrip } from "./StatStrip";
 import { GroupByToggle } from "./GroupByToggle";
 import { GroupRollup } from "./GroupRollup";
 import { Podium } from "./Podium";
+import { PlanBar } from "./PlanBar";
 import { TimelineChart } from "./TimelineChart";
 import { SessionTable } from "./SessionTable";
 import { Distributions } from "./Distributions";
@@ -46,6 +47,8 @@ export function DashboardPage({
           <HeroConsole data={data} />
           <StatStrip data={data} />
         </section>
+
+        <PlanBar data={data} />
 
         {/* group-by toggle controls the aggregate surface below */}
         <div className="gb-row">

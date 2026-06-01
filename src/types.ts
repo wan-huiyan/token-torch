@@ -93,6 +93,18 @@ export interface DashboardData {
   };
   flags: Flag[];
   insights_md: string | null; // markdown (bold + "- " bullets); null -> placeholder
+  /** OPT-IN plan-% headroom (B2). Present ONLY when a gitignored
+   *  scripts/lib/plan.local.json was found at generate-time. Always an
+   *  ESTIMATE (plan limits + reset cadence are user-supplied, not authoritative):
+   *  the UI tags it [estimate]. Absent → the bar is not rendered (no fabrication). */
+  plan?: {
+    tier: string;            // user-supplied label, e.g. "Max 20x" — NOT verified
+    cycle_anchor: string;    // ISO date the current cycle started (user-supplied)
+    cycle_days: number;      // cycle length in days (user-supplied; e.g. 30)
+    spend_usd: number;       // cost in the current cycle window (derived from sessions[])
+    limit_usd?: number;      // optional user-supplied $ cap for the cycle
+    note: string;            // explicit unverified/estimate caveat copy
+  };
 }
 
 export interface ProjectRow {

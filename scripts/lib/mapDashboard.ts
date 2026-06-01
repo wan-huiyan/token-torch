@@ -14,6 +14,7 @@ import { deriveEffort, type SettingsFacts } from "./effort";
 import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
 import { computeBurnBands } from "../../src/shared/burnTier";
+import { loadPlanConfig } from "./plan";
 
 const SMALL_N_THRESHOLD = 10;
 
@@ -325,6 +326,7 @@ export function mapDashboard(
     },
     flags,
     insights_md: buildInsightsMd(generatedDate, totals, projects, small_n),
+    plan: loadPlanConfig(rows),
   };
 
   return {

@@ -401,3 +401,14 @@
 
 /* ---- group-by row ---- */
 .gb-row { display: flex; justify-content: flex-end; margin: 18px 0 6px; }
+
+/* ---- plan-% bar (opt-in, estimate) ---- */
+.planbar { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 10px;
+  background: var(--panel, rgba(255,255,255,.03)); }
+.pb-head { display: flex; align-items: baseline; gap: 8px; }
+.pb-tier { font-weight: 700; }
+.pb-est { font-family: var(--mono); font-size: .66rem; letter-spacing: .05em; color: var(--amber); }
+.pb-track { height: 10px; border-radius: 6px; background: var(--line-soft); overflow: hidden; margin: 8px 0 6px; }
+.pb-track > i { display: block; height: 100%; }
+.pb-cap { font-family: var(--mono); font-size: .78rem; color: var(--ink-dim); }
+.pb-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
