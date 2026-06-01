@@ -356,3 +356,11 @@
   color: var(--ink-dim); background: none; border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .gbopt.on { color: var(--bg); background: var(--cyan); }
 .gbopt:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* ---- data-tier badge ---- */
+.dtbadge { font-family: var(--mono); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line-soft); white-space: nowrap; }
+.dt-enriched { color: var(--lime); border-color: color-mix(in srgb, var(--lime) 45%, transparent); }
+.dt-jsonl { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, transparent); }
+.dt-thin { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.dt-unknown { color: var(--ink-faint); }
