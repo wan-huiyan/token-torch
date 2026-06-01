@@ -22,8 +22,8 @@ import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadCorpus } from "./lib/corpus";
-import { ingestSessions } from "./lib/ingest";
+import { loadCorpus, type SessionGroup } from "./lib/corpus";
+import { ingestSessions, type IngestResult } from "./lib/ingest";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
@@ -45,9 +45,9 @@ function writeJson(path: string, data: unknown): void {
 function verify(
   details: SessionDetailData[],
   dashboard: DashboardData,
-  dropped: string[],
-  corpusSessionCount: number,
   timingChecks: SubagentTimingCheck[],
+  ingest: IngestResult,
+  overlay: Map<string, SessionGroup>,
 ): string[] {
   const checks: string[] = [];
 
@@ -66,18 +66,20 @@ function verify(
         `time_saved=${dashboard.totals.time_saved_min}m (${dashboard.totals.time_saved_hours}h)`,
     );
 
-  // COVERAGE (the check whose absence let sessions vanish silently): every
-  // distinct corpus session is either emitted or explicitly dropped-and-flagged.
-  if (dashboard.meta.session_count + dropped.length !== corpusSessionCount)
+  // FLOOR ACCOUNTING: every discovered session is either kept or floored — no silent loss.
+  // Under JSONL-primary, `dropped` (unmappable corpus records) is always [] since the
+  // floor runs upstream in ingestSessions; we account for it via droppedFloor instead.
+  if (ingest.kept + ingest.droppedFloor !== ingest.discovered)
     throw new Error(
-      `coverage: ${dashboard.meta.session_count} emitted + ${dropped.length} dropped != ${corpusSessionCount} corpus sessions`,
+      `floor accounting: kept ${ingest.kept} + floored ${ingest.droppedFloor} != discovered ${ingest.discovered}`,
     );
-  const droppedFlagged = dashboard.flags.some((f) => f.metric === "coverage");
-  if (dropped.length && !droppedFlagged)
-    throw new Error(`coverage: ${dropped.length} sessions dropped but no coverage flag emitted`);
+  // The emitted detail records must match the kept sessions.
+  if (details.length !== ingest.kept)
+    throw new Error(
+      `floor accounting: ${details.length} session detail records emitted but ingest.kept=${ingest.kept}`,
+    );
   checks.push(
-    `✓ coverage: ${dashboard.meta.session_count}/${corpusSessionCount} sessions emitted` +
-      (dropped.length ? `, ${dropped.length} dropped + flagged (${dropped.join(", ")})` : `, 0 dropped`),
+    `✓ floor accounting: ${ingest.kept} kept + ${ingest.droppedFloor} floored == ${ingest.discovered} discovered`,
   );
 
   // cost_by_fidelity sums to the grand total.
@@ -120,6 +122,24 @@ function verify(
     }
   }
   checks.push(`✓ ${details.length} session details pass cost/fidelity/interactive/time invariants`);
+  checks.push(
+    `✓ per-model by_category sums to total_usd (check #1) for ${details.filter((d) => d.cost.by_category).length} sessions`,
+  );
+
+  // cctime-transition: log how many JSONL-derived totals differ >5% from the overlay
+  // (expected: different extraction methods and pricing bases; not blended, just surfaced).
+  let moved = 0;
+  for (const d of details) {
+    const ov = overlay.get(d.id);
+    const ccCost =
+      ov?.c?.cost_estimate_usd?.grand_total ?? ov?.a?.estimatedCostUsd ?? ov?.b?.grand_total?.cost_usd;
+    if (ccCost != null && Math.abs(ccCost - d.cost.total_usd) / Math.max(ccCost, 1) > 0.05) moved++;
+  }
+  if (moved)
+    console.log(
+      `ℹ ${moved} session(s) differ >5% from their usage-tracking record (expected: JSONL vs cctime extraction differ; see Plan 2 calibration). Not blended.`,
+    );
+
   return checks;
 }
 
@@ -133,7 +153,7 @@ function main(): void {
   const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
 
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, dropped, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt);
+  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt);
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
@@ -156,11 +176,7 @@ function main(): void {
   );
 
   if (VERIFY) {
-    // NOTE: the coverage check below still expects session_count + dropped == discovered.
-    // With the upstream substance floor, floored sessions are NOT in `dropped`, so this
-    // throws whenever droppedFloor > 0 (now the norm). Task 10 reworks --verify for
-    // floor accounting; until then, run plain `generate` (no --verify).
-    for (const line of verify(details, dashboard, dropped, ingest.discovered, subagentTiming.checks))
+    for (const line of verify(details, dashboard, subagentTiming.checks, ingest, overlay))
       console.log(line);
   }
 }
