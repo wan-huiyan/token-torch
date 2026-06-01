@@ -22,6 +22,16 @@ export interface DashboardData {
     /** true → do NOT present trend lines as real; show "sample only" state */
     small_n: boolean;
     fidelity_note: string;
+    /** substance-floor accounting: sessions excluded upstream (count + excluded $).
+     *  Surfaced so the headline total's exclusions are never silent. Optional for
+     *  back-compat with older fixtures. */
+    floor?: {
+      discovered: number;
+      kept: number;
+      dropped: number;
+      dropped_with_usage: number;
+      dropped_with_usage_usd: number;
+    };
   };
   totals: {
     cost_usd: number;
