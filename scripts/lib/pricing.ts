@@ -22,13 +22,41 @@ export interface Rates {
   cache_read: number;
 }
 
-/** Opus 4.5+ corrected rates, $/MTok. */
-export const OPUS_RATES: Rates = {
-  fresh_input: 5.0,
-  output: 25.0,
-  cache_write: 6.25,
-  cache_read: 0.5,
+export type ModelFamily = "opus" | "sonnet" | "haiku";
+
+/**
+ * Per-model $/MTok rates. Sourced from the corpus Schema-C `pricing_basis`
+ * (verified vs platform.claude.com/docs 2026-05-29): Opus 4.5+ (incl. 4.7 & 4.8)
+ * in=$5/out=$25 · Sonnet 4.x in=$3/out=$15 · Haiku 4.5 in=$1/out=$5 per MTok.
+ * Rule for every family: cache_write = 1.25× input, cache_read = 0.1× input.
+ * NOT modeled (per corpus caveat): the 1M-context window (billed at standard
+ * per-token rates for current models), fast-mode premium, Opus-4.7+ tokenizer change.
+ */
+export const MODEL_RATES: Record<ModelFamily, Rates> = {
+  opus: { fresh_input: 5.0, output: 25.0, cache_write: 6.25, cache_read: 0.5 },
+  sonnet: { fresh_input: 3.0, output: 15.0, cache_write: 3.75, cache_read: 0.3 },
+  haiku: { fresh_input: 1.0, output: 5.0, cache_write: 1.25, cache_read: 0.1 },
 };
+
+/** Opus 4.5+ corrected rates, $/MTok. (Kept as a named export for back-compat.) */
+export const OPUS_RATES: Rates = MODEL_RATES.opus;
+
+/** Map a raw `message.model` id to its pricing family; null if unrecognised. */
+export function familyOf(modelId: string): ModelFamily | null {
+  const m = modelId.toLowerCase();
+  if (m.includes("opus")) return "opus";
+  if (m.includes("sonnet")) return "sonnet";
+  if (m.includes("haiku")) return "haiku";
+  return null;
+}
+
+/**
+ * Rates for a given model id. Unknown ids fall back to Opus — the HIGHEST rate —
+ * so an unrecognised model is never silently under-priced (honest upper bound).
+ */
+export function ratesForModel(modelId: string): Rates {
+  return MODEL_RATES[familyOf(modelId) ?? "opus"];
+}
 
 export const PRICING_BASIS =
   "Opus 4.5+ estimate: fresh input $5/M · output $25/M · cache-write $6.25/M · cache-read $0.50/M. " +
