@@ -111,6 +111,7 @@ export interface CategoryCost {
  * per-category dollars sum EXACTLY to the rounded grand total (largest-remainder
  * cent reconciliation). Returns both the map and the reconciled total.
  */
+// NOTE: shares the largest-remainder cent reconciliation with buildByCategoryPerModel — keep in sync.
 export function buildByCategory(
   combined: TokenSet,
   rates: Rates = OPUS_RATES,
@@ -151,6 +152,7 @@ export function buildByCategory(
  * the token-weighted EFFECTIVE rate for the category (== the single rate when only
  * one model is present). Unknown model ids fall back to Opus (highest rate).
  */
+// NOTE: shares the largest-remainder cent reconciliation with buildByCategory — keep in sync.
 export function buildByCategoryPerModel(
   perModelTokens: Record<string, TokenSet>,
 ): { byCategory: Record<Category, CategoryCost>; totalUsd: number } {

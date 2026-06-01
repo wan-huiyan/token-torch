@@ -99,4 +99,13 @@ check("per-model by_category: unknown model priced at Opus (conservative)", () =
   assert.equal(r.totalUsd, 5); // opus fallback
 });
 
+check("per-model by_category: empty map → zero totals, no crash", () => {
+  const r = buildByCategoryPerModel({});
+  assert.equal(r.totalUsd, 0);
+  for (const c of ["fresh_input", "cache_write", "cache_read", "output"] as const) {
+    assert.equal(r.byCategory[c].tokens, 0);
+    assert.equal(r.byCategory[c].usd, 0);
+  }
+});
+
 console.log(`\n${passed} pricing checks passed`);
