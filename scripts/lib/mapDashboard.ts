@@ -54,11 +54,20 @@ export interface SubagentTimingCheck {
   savedMin: number;
 }
 
+/** Substance-floor accounting threaded from ingestSessions → surfaced as a
+ *  coverage flag + meta.floor (the floor runs upstream; without this the
+ *  exclusion would be silent — the honesty-spine invariant, ADR 0001/0002). */
+export interface FloorStats {
+  discovered: number;
+  kept: number;
+  droppedFloor: number;
+  droppedWithUsage: number;
+  droppedWithUsageUsd: number;
+}
+
 export interface GenerateResult {
   dashboard: DashboardData;
   details: SessionDetailData[];
-  /** session ids present in the corpus but not mappable into the contract. */
-  dropped: string[];
   /** time-saved coverage + per-session union vs wall-clock (for --verify). */
   subagentTiming: {
     sessionsWithSubagents: string[];
@@ -71,13 +80,11 @@ export function mapDashboard(
   records: SessionRecord[],
   overlay: Map<string, SessionGroup>,
   generatedAtIso: string,
+  floor: FloorStats,
   projectsDir: string = defaultProjectsDir(),
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
-  // With JSONL-primary ingestion nothing reaches here unparseable (the floor runs
-  // upstream in ingestSessions); kept for the contract + coverage flag plumbing.
-  const dropped: string[] = [];
   let fileCount = 0;
 
   // index subagent transcripts once; per-session timing/cost fallback reads from it.
@@ -236,12 +243,22 @@ export function mapDashboard(
       metric: "coverage",
     });
   }
-  if (dropped.length) {
-    // never silent: a corpus session we couldn't parse is surfaced, not hidden.
+  // never silent: the substance floor runs upstream in ingestSessions, so dropped
+  // sessions don't reach this map — surface them here from the threaded floor stats
+  // (the headline total excludes them). ADR 0001/0002 honesty-spine invariant.
+  if (floor.droppedFloor > 0) {
+    // true total spend = shown (kept) total + the floored-but-usage-bearing $;
+    // no-usage drops contribute $0, so this is the full denominator.
+    const trueTotal = round2(cost_usd + floor.droppedWithUsageUsd);
+    const pct = trueTotal > 0 ? round2((floor.droppedWithUsageUsd / trueTotal) * 100) : 0;
     flags.unshift({
       level: "warn",
-      title: `${dropped.length} corpus session${dropped.length > 1 ? "s" : ""} could not be parsed`,
-      detail: `Records present but in an unrecognized schema (ids: ${dropped.join(", ")}). They are excluded from totals — figures below understate true usage.`,
+      title: `${floor.droppedFloor} sessions excluded by the substance floor`,
+      detail:
+        `${floor.droppedFloor} of ${floor.discovered} discovered sessions were excluded by the substance floor ` +
+        `(fewer than 10 assistant messages, or no usage data). ` +
+        `${floor.droppedWithUsage} of them carried minor usage worth ~$${floor.droppedWithUsageUsd.toFixed(2)} ` +
+        `(${pct}% of total spend) — the shown total reflects the ${floor.kept} substantial sessions.`,
       metric: "coverage",
     });
   }
@@ -259,6 +276,13 @@ export function mapDashboard(
       fidelity_note: mainLoopCount
         ? `${mainLoopCount} of ${rows.length} sessions is main-loop-only (subagent spend not counted).`
         : "All sessions are high-fidelity (subagent spend counted).",
+      floor: {
+        discovered: floor.discovered,
+        kept: floor.kept,
+        dropped: floor.droppedFloor,
+        dropped_with_usage: floor.droppedWithUsage,
+        dropped_with_usage_usd: floor.droppedWithUsageUsd,
+      },
     },
     totals,
     projects,
@@ -276,7 +300,6 @@ export function mapDashboard(
   return {
     dashboard,
     details,
-    dropped,
     subagentTiming: { sessionsWithSubagents, covered, checks: timingChecks },
   };
 }

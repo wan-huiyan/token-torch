@@ -153,13 +153,20 @@ function main(): void {
   const overlay = new Map(loadCorpus(CORPUS_DIR).map((g) => [g.id, g]));
 
   const generatedAt = new Date().toISOString();
-  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt);
+  const { dashboard, details, subagentTiming } = mapDashboard(ingest.records, overlay, generatedAt, {
+    discovered: ingest.discovered,
+    kept: ingest.kept,
+    droppedFloor: ingest.droppedFloor,
+    droppedWithUsage: ingest.droppedWithUsage,
+    droppedWithUsageUsd: ingest.droppedWithUsageUsd,
+  });
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
 
   console.log(
-    `Ingested: ${ingest.kept}/${ingest.discovered} sessions (floored ${ingest.droppedFloor}: <10 msgs or no usage)`,
+    `Ingested: ${ingest.kept}/${ingest.discovered} sessions (floored ${ingest.droppedFloor}: <10 msgs or no usage; ` +
+      `${ingest.droppedWithUsage} of those carried usage worth ~$${ingest.droppedWithUsageUsd})`,
   );
   console.log(`Overlay: ${overlay.size} cctime/usage-tracking record(s) from ${CORPUS_DIR}`);
   console.log(

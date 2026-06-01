@@ -11,7 +11,7 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { totalTokens, type TokenSet } from "./pricing";
+import { buildByCategoryPerModel, totalTokens, type TokenSet } from "./pricing";
 import { normalizeProject } from "./projects";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
@@ -277,7 +277,9 @@ export interface IngestResult {
   records: SessionRecord[];
   discovered: number;  // distinct session uuids with a main transcript
   kept: number;
-  droppedFloor: number;
+  droppedFloor: number;        // TOTAL floored (incl. no-usage); kept + droppedFloor == discovered
+  droppedWithUsage: number;    // subset of droppedFloor that carried real usage (would have cost $)
+  droppedWithUsageUsd: number; // recomputed per-model $ of those usage-bearing floored sessions (round2)
   droppedIds: string[]; // 8-char ids dropped by the floor (count is the load-bearing field; ids for optional logging)
 }
 
@@ -288,7 +290,7 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
   // uuid → { paths: string[], dirs: string[] }
   const byUuid = new Map<string, { paths: string[]; dirs: string[] }>();
   let projects: string[];
-  try { projects = readdirSync(projectsDir); } catch { return { records: [], discovered: 0, kept: 0, droppedFloor: 0, droppedIds: [] }; }
+  try { projects = readdirSync(projectsDir); } catch { return { records: [], discovered: 0, kept: 0, droppedFloor: 0, droppedWithUsage: 0, droppedWithUsageUsd: 0, droppedIds: [] }; }
   for (const dir of projects) {
     const dirPath = join(projectsDir, dir);
     let entries: string[];
@@ -307,6 +309,11 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
   const cache: IngestCache = cachePath ? loadCache(cachePath) : {};
   const records: SessionRecord[] = [];
   const droppedIds: string[] = [];
+  // Floored-but-usage-bearing accounting: these sessions DID cost money but are
+  // excluded from the headline total by the substance floor — surfaced honestly
+  // downstream (coverage flag) instead of vanishing silently.
+  let droppedWithUsage = 0;
+  let droppedWithUsageUsd = 0;
   for (const [uuid, { paths, dirs }] of byUuid) {
     const parsed = parseWithCache(paths, cache);
     // choose the longest decoded project name across the session's worktree dirs
@@ -316,7 +323,13 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
       decodedProject: decoded, projectFn: normalizeProject, parsed,
     });
     if (passesFloor(rec)) records.push(rec);
-    else droppedIds.push(rec.id);
+    else {
+      droppedIds.push(rec.id);
+      if (rec.hasUsage) {
+        droppedWithUsage += 1;
+        droppedWithUsageUsd += buildByCategoryPerModel(rec.perModelTokens).totalUsd;
+      }
+    }
   }
 
   if (cachePath) {
@@ -329,6 +342,8 @@ export function ingestSessions(projectsDir = defaultProjectsDir(), cachePath?: s
     discovered: byUuid.size,
     kept: records.length,
     droppedFloor: droppedIds.length,
+    droppedWithUsage,
+    droppedWithUsageUsd: round2(droppedWithUsageUsd),
     droppedIds,
   };
 }
