@@ -99,7 +99,8 @@ const recStub = (over: Partial<SessionRecord>): SessionRecord => ({
   rawProjectDirs: ["d"], tokens: { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 },
   perModelTokens: { "claude-opus-4-8": { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 } },
   modelMsgCounts: { "claude-opus-4-8": 12 }, dominantModel: "opus", cacheHitPct: 0,
-  wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12, toolCounts: {}, hasUsage: true,
+  wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12,
+  scaffoldingFloor: 0, turnCount: 0, toolCounts: {}, hasUsage: true,
   ...over,
 });
 
@@ -215,6 +216,37 @@ check("loadCache discards a cache whose version mismatches CACHE_VERSION", () =>
   const loaded = loadCache(cp);
   assert.ok(loaded["/p.jsonl"]);
   rmSync(dir3, { recursive: true, force: true });
+});
+
+// --- Plan 8 / issue #10: scaffoldingFloor = min nonzero cache_read; turnCount = #(cr>0) ---
+check("parseMainTranscript derives scaffoldingFloor (min nonzero cache_read) + turnCount", () => {
+  const d = join(tmpdir(), "tt-overhead-floor");
+  mkdirSync(d, { recursive: true });
+  const p = join(d, "s.jsonl");
+  const row = (id: string, ts: string, cr: number, cw: number, out: number) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: ts,
+      message: {
+        id,
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 2, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: out },
+        content: [],
+      },
+    });
+  writeFileSync(
+    p,
+    [
+      row("m0", "2026-06-03T09:59:00Z", 0, 80000, 50), // cr=0 turn: excluded from floor AND turnCount
+      row("m1", "2026-06-03T10:00:00Z", 30000, 5000, 100), // floor candidate (min nonzero)
+      row("m2", "2026-06-03T10:01:00Z", 45000, 800, 100),
+      row("m3", "2026-06-03T10:02:00Z", 60000, 800, 100),
+    ].join("\n"),
+  );
+  const parsed = parseMainTranscript([p]);
+  assert.equal(parsed.scaffoldingFloor, 30000);
+  assert.equal(parsed.turnCount, 3); // m0 (cr=0) excluded
+  rmSync(d, { recursive: true, force: true });
 });
 
 console.log(`\n${passed} ingest checks passed`);

@@ -17,7 +17,8 @@ const baseRec = (over: Partial<SessionRecord>): SessionRecord => ({
   rawProjectDirs: ["d"], tokens: { fresh_input: 100, output: 50, cache_write: 0, cache_read: 0 },
   perModelTokens: { "claude-opus-4-8": { fresh_input: 100, output: 50, cache_write: 0, cache_read: 0 } },
   modelMsgCounts: { "claude-opus-4-8": 20 }, dominantModel: "opus", cacheHitPct: 0,
-  wallClockMin: 5, activeMin: 5, idleMin: 0, assistantMsgCount: 20, toolCounts: { Bash: 3 }, hasUsage: true,
+  wallClockMin: 5, activeMin: 5, idleMin: 0, assistantMsgCount: 20,
+  scaffoldingFloor: 0, turnCount: 0, toolCounts: { Bash: 3 }, hasUsage: true,
   ...over,
 });
 
@@ -62,6 +63,19 @@ check("inferred_default low-confidence for a pre-cutoff session with no marker",
   assert.equal(eff.source, "inferred_default");
   assert.equal(eff.confidence, "low");
   assert.equal(eff.value, "high");
+});
+
+check("mapDashboard attaches context_overhead to rows, details, and aggregates totals (Plan 8 / #10)", () => {
+  const rec = baseRec({ id: "ov000001", scaffoldingFloor: 30000, turnCount: 4 });
+  const { dashboard, details } = mapDashboard([rec], new Map(), "2026-06-03T00:00:00.000Z", floor, emptyDir, settings);
+  const detail = details.find((d) => d.id === "ov000001")!;
+  const row = dashboard.sessions.find((r) => r.id === "ov000001")!;
+  assert.equal(detail.context_overhead?.scaffolding_tokens, 30000);
+  assert.equal(detail.context_overhead?.reread_tokens, 120000); // 30000 * 4
+  // row mirrors the detail (lockstep — L9)
+  assert.equal(row.context_overhead?.reread_tokens, 120000);
+  // single session → aggregate equals it
+  assert.equal(dashboard.totals.context_overhead?.reread_tokens, 120000);
 });
 
 console.log(`\n${passed} mapDashboard.slice checks passed`);
