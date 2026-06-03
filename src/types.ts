@@ -288,13 +288,20 @@ export interface Turn {
 export interface ShippedItem {
   title: string;
   ref?: string;
-  meta?: string; // e.g. "merged", "+612 / -94", "$2.06 · 3m"
+  meta?: string; // PRs: "merged"/"opened" (status, NEVER a cost). Reviews: "$2.06 · 3m".
+  /** Plan 6: commits folded under a PR (plain subjects; no per-item cost). */
+  commits?: ShippedItem[];
+  /** Plan 6: reviews folded under a PR (each carries a real $/time meta). */
+  reviews?: ShippedItem[];
 }
 export interface Shipped {
+  /** Each PR may carry nested `commits` + `reviews` (Plan 6). */
   prs?: ShippedItem[];
+  /** Reviews with no PR ref (could not be linked) stay top-level. */
   reviews?: ShippedItem[];
   adrs?: ShippedItem[];
   skills?: ShippedItem[];
+  /** Direct-to-main commits (no owning PR) stay top-level. */
   commits?: ShippedItem[];
   /** distinct files written/edited in the main loop this session */
   files_touched?: number;
