@@ -16,6 +16,7 @@ import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDi
 import { computeBurnBands } from "../../src/shared/burnTier";
 import { loadPlanConfig } from "./plan";
 import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
+import { deriveBillingWindows, eventsFromRecords } from "./billingWindows";
 import { isRealModelId } from "../../src/shared/models";
 
 const SMALL_N_THRESHOLD = 10;
@@ -380,6 +381,7 @@ export function mapDashboard(
     insights_md: llmInsightsMd ?? buildInsightsMd(generatedDate, totals, projects, small_n),
     insights_source: llmInsightsMd ? "llm" : "template",
     plan: loadPlanConfig(rows),
+    billing_windows: deriveBillingWindows(eventsFromRecords(records), Date.parse(generatedAtIso)),
   };
 
   return {
