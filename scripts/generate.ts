@@ -28,7 +28,7 @@ import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
 import type { SettingsFacts } from "./lib/effort";
-import { buildInsightsLLM } from "./lib/insightsLlm";
+import { buildInsightsLLM, INSIGHTS_PROMPT_VERSION } from "./lib/insightsLlm";
 import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
 import { validateInsightNumbers } from "./lib/insightsValidate";
 
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
   // LLM path is gated on the API key — offline/CI generate stays on templates.
   let llmInsightsMd: string | null = null;
   if (process.env.ANTHROPIC_API_KEY) {
-    const hash = insightsHash(base.dashboard, INSIGHTS_MODEL);
+    const hash = insightsHash(base.dashboard, INSIGHTS_MODEL, INSIGHTS_PROMPT_VERSION);
     const cached = readInsightsCache(INSIGHTS_CACHE_PATH, hash);
     if (cached) {
       llmInsightsMd = cached;
