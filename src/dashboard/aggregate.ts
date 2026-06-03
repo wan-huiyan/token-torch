@@ -6,8 +6,13 @@
  * No superlative/causal copy is produced here — callers render neutral labels.
  * ========================================================================== */
 import type { SessionRow } from "../types";
+import { isRealModelId } from "../shared/models";
 
 export type GroupBy = "project" | "week" | "model" | "effort";
+
+/** Below this session count a group is "illustrative, not significant" (mirrors
+ *  SMALL_N_THRESHOLD in mapDashboard) — the UI suppresses per-session rate framing. */
+export const SMALL_N = 10;
 
 /** A neutral aggregate over a set of sessions. NO ranking adjectives — the
  *  caller renders label · n · $ · cache% · tokens, never "best/efficient". */
@@ -56,8 +61,9 @@ export function effortLabel(value: string): string {
   return value || UNKNOWN;
 }
 
-/** Per-grouping bucket key + label for one session. */
-function bucketOf(s: SessionRow, by: GroupBy): { key: string; label: string } {
+/** Per-grouping bucket key + label for one session. Exported so breakdownGroups
+ *  buckets identically to groupSessions (no duplicated switch). */
+export function bucketOf(s: SessionRow, by: GroupBy): { key: string; label: string } {
   switch (by) {
     case "project":
       return { key: s.project || UNKNOWN, label: s.project || UNKNOWN };
@@ -106,6 +112,85 @@ export function groupSessions(sessions: SessionRow[], by: GroupBy): GroupRow[] {
     });
   }
   return out.sort((a, b) => b.cost_usd - a.cost_usd);
+}
+
+/** A richer per-group breakdown row. DESCRIBES the group (date-span, mix, axes);
+ *  NEVER ranks. The caller renders neutral labels, no "best/efficient/faster". */
+export interface BreakdownGroup extends GroupRow {
+  top_projects: { name: string; sessions: number }[]; // up to 3, by session count desc
+  effort_mix: Record<string, number>;                 // effort.source → session count
+  out_tokens: number;                                  // Σ session output tokens
+  out_tokens_per_session: number;
+  tool_calls_per_session: number;                      // Σ top_tools counts / n
+  time_saved_min: number;                              // Σ session time-saved
+  small_n: boolean;                                    // n < SMALL_N → illustrative only
+}
+
+/** A session is "mixed-version" if its model_versions span >1 REAL Claude version.
+ *  Such sessions are excluded from the model grouping (not dominant-bucketed) so
+ *  neither version's bucket is contaminated (spec §8). */
+export function isMixedVersion(s: SessionRow): boolean {
+  const v = s.model_versions;
+  if (!v) return false;
+  return Object.keys(v).filter((id) => isRealModelId(id)).length > 1;
+}
+
+/** Aggregate sessions into richer BreakdownGroups (per-group context + ground-truth
+ *  axes). For the model grouping, mixed-version sessions are EXCLUDED and counted
+ *  (returned as `excludedMixed`) rather than dominant-bucketed. Reuses bucketOf +
+ *  groupSessions so bucketing/sorting stay identical to the dashboard rollup. */
+export function breakdownGroups(
+  sessions: SessionRow[],
+  by: GroupBy,
+): { groups: BreakdownGroup[]; excludedMixed: number } {
+  let excludedMixed = 0;
+  const pool = sessions.filter((s) => {
+    if (by === "model" && isMixedVersion(s)) {
+      excludedMixed++;
+      return false;
+    }
+    return true;
+  });
+  const base = groupSessions(pool, by); // GroupRow fields + cost-desc sort
+  const byKey = new Map<string, SessionRow[]>();
+  for (const s of pool) {
+    const { key } = bucketOf(s, by);
+    const arr = byKey.get(key);
+    if (arr) arr.push(s);
+    else byKey.set(key, [s]);
+  }
+  const groups: BreakdownGroup[] = base.map((g) => {
+    const rows = byKey.get(g.key) ?? [];
+    const projCount = new Map<string, number>();
+    const effort_mix: Record<string, number> = {};
+    let out = 0;
+    let tools = 0;
+    let saved = 0;
+    for (const r of rows) {
+      projCount.set(r.project, (projCount.get(r.project) ?? 0) + 1);
+      const src = r.effort?.source ?? "unknown";
+      effort_mix[src] = (effort_mix[src] ?? 0) + 1;
+      out += r.out_tokens ?? 0;
+      tools += Object.values(r.top_tools).reduce((s, n) => s + n, 0);
+      saved += r.time_saved_min ?? 0;
+    }
+    const top_projects = [...projCount.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, sessions]) => ({ name, sessions }));
+    const n = g.sessions || 1;
+    return {
+      ...g,
+      top_projects,
+      effort_mix,
+      out_tokens: out,
+      out_tokens_per_session: Math.round(out / n),
+      tool_calls_per_session: Math.round((tools / n) * 10) / 10,
+      time_saved_min: Math.round(saved),
+      small_n: g.sessions < SMALL_N,
+    };
+  });
+  return { groups, excludedMixed };
 }
 
 /** Case-insensitive substring filter over id + project + model fields. */
