@@ -194,13 +194,36 @@ function verify(
   if (effortHist.observed < 1)
     throw new Error("no sessions have observed effort — /effort extraction likely broken (Plan 3)");
 
-  // (b) every kept session carries a model_version.
+  // (b) model_version coverage is INFORMATIONAL — a session with no real dominant id
+  //     (all-synthetic assistant messages) is rare + honest; it lands in the "unknown"
+  //     model bucket, never crashes the build (issue #14; portability — Plan 7).
   const noVersion = dashboard.sessions.filter((s) => !s.model_version);
-  if (noVersion.length)
+  checks.push(
+    `✓ model_version coverage: ${dashboard.sessions.length - noVersion.length}/${dashboard.sessions.length} ` +
+      `sessions have a real dominant id` +
+      (noVersion.length ? ` (${noVersion.length} all-synthetic → unknown bucket)` : ``),
+  );
+
+  // (b2) HARD guard (issue #14): a PRESENT model_version, and every model_versions key,
+  //      must be a real claude-* id. This is the symmetric sink for the deriveModelVersion
+  //      source filter — it fails LOUD if a synthetic id ever leaks to a session row.
+  const synthDominant = dashboard.sessions.filter((s) => s.model_version && !/^claude-/.test(s.model_version));
+  if (synthDominant.length)
     throw new Error(
-      `${noVersion.length} session(s) missing model_version (e.g. ${noVersion[0].id}) (Plan 3 coverage)`,
+      `${synthDominant.length} session(s) have a synthetic model_version ` +
+        `(e.g. ${synthDominant[0].id}="${synthDominant[0].model_version}") — deriveModelVersion filter broke (#14)`,
     );
-  checks.push(`✓ model_version coverage: all ${dashboard.sessions.length} sessions have a dominant version id`);
+  const synthInMap = dashboard.sessions.filter((s) =>
+    Object.keys(s.model_versions ?? {}).some((k) => !/^claude-/.test(k)),
+  );
+  if (synthInMap.length)
+    throw new Error(
+      `${synthInMap.length} session(s) have a synthetic id in model_versions ` +
+        `(e.g. ${synthInMap[0].id}) — deriveModelVersion map filter broke (#14)`,
+    );
+  checks.push(
+    `✓ model_version synthetic guard: 0 sessions expose a non-claude-* id (dominant or in map)`,
+  );
 
   // (c) every kept session carries a data_tier.
   const noTier = dashboard.sessions.filter((s) => !s.data_tier);
