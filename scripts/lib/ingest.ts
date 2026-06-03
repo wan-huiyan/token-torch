@@ -19,7 +19,7 @@ export const defaultProjectsDir = (): string => join(homedir(), ".claude", "proj
 
 // Used by deriveTime — kept here so the constants live next to the parser.
 const MS_PER_MIN = 60_000;
-const GAP_IDLE_MS = 120_000; // >120s between events = you-away (idle), not compute
+export const GAP_IDLE_MS = 120_000; // >120s between events = you-away (idle), not compute
 
 type RawUsage = {
   input_tokens?: number; output_tokens?: number;
