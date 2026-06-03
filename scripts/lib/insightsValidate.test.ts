@@ -177,4 +177,89 @@ check("a session-only number ($777.77) is NOT whitelisted (allowedNumbers is agg
   assert.ok(r.offending.includes("$777.77"), `expected $777.77 offending, got ${JSON.stringify(r.offending)}`);
 });
 
+// --- #24 PCN first cut: model_mix version shares must bind to the RIGHT version. ---
+// matchesAllowed only checks a value exists SOMEWHERE in the allow-set, so a SWAPPED
+// attribution (where both shares are valid values) sails through the whitelist scan.
+// The binding check ties each model-version LABEL to its OWN share (per-claim). The
+// swap fixture is the discriminating test: correct-order passes, swapped-order is
+// flagged — and BOTH values are whitelisted, so it REDs on pre-#24 code (proving
+// entity-BINDING, not mere membership). Own fixture data; distinct, unambiguous shares.
+function mixFixture(): DashboardData {
+  const f = fixture();
+  f.distributions.model_mix = { "claude-opus-4-8": 70, "claude-opus-4-7": 25, "claude-sonnet-4-6": 5 };
+  return f;
+}
+
+check("correct-order model_mix prose validates (per-claim binding holds)", () => {
+  const r = validateInsightNumbers("Model mix: Opus 4.8 70%, Opus 4.7 25%, Sonnet 4.6 5%.", mixFixture());
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
+check("swapped model_mix attribution is flagged (both 70 & 25 whitelisted → binding, not membership)", () => {
+  const r = validateInsightNumbers("Model mix: Opus 4.8 25%, Opus 4.7 70%, Sonnet 4.6 5%.", mixFixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.some((o) => /Opus 4\.8\D*25/.test(o)), `expected Opus 4.8↔25 flagged, got ${JSON.stringify(r.offending)}`);
+});
+
+// The live arcade voice BOLDS the numbers ("Opus 4.7 **74.75%**"); the binding must
+// fire THROUGH the markdown emphasis or it is vacuous on real prose. Real format below.
+check("real bolded arcade prose binds through markdown and passes (non-vacuous on live format)", () => {
+  const f = fixture();
+  f.distributions.model_mix = { "claude-opus-4-7": 74.75, "claude-opus-4-8": 20.13, "claude-sonnet-4-6": 5.12 };
+  const r = validateInsightNumbers("🌙 Model mix: Opus 4.7 **74.75%**, Opus 4.8 **20.13%**, Sonnet 4.6 **5.12%**.", f);
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
+check("real bolded prose with a SWAPPED share is flagged (binding fires through markdown bold)", () => {
+  const f = fixture();
+  f.distributions.model_mix = { "claude-opus-4-7": 74.75, "claude-opus-4-8": 20.13, "claude-sonnet-4-6": 5.12 };
+  const r = validateInsightNumbers("🌙 Model mix: Opus 4.7 **20.13%**, Opus 4.8 **74.75%**, Sonnet 4.6 **5.12%**.", f);
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.some((o) => /Opus 4\.7\D*20\.13/.test(o)), `expected Opus 4.7↔20.13 flagged, got ${JSON.stringify(r.offending)}`);
+});
+
+// Deliberate fail-OPEN on UNBOUND numbers: no tight "Label N%" adjacency → the per-claim
+// check does not fire (70 & 5 still pass the whitelist scan). This is the defense-in-depth
+// limitation AND the guarantee that the binding adds no false positives → no generate:verify
+// regression on legitimately loose arcade phrasing.
+// The live arcade voice uses SHORT connectors ("Opus 4.7 AT 74.35%", "Opus 4.7: 74%").
+// The binding must span a short non-digit gap or it is vacuous on real prose (observed
+// 2026-06-03: a fresh generation wrote "Opus 4.7 at 74.35%"). Swap-with-connector REDs
+// on tight-adjacency-only code.
+check("swapped attribution with an 'at' connector is flagged (binding spans short connectors)", () => {
+  const r = validateInsightNumbers("Model mix: Opus 4.8 at 25%, Opus 4.7 at 70%, Sonnet 4.6 at 5%.", mixFixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.some((o) => /Opus 4\.8\D*25/.test(o)), `expected Opus 4.8↔25 flagged, got ${JSON.stringify(r.offending)}`);
+});
+
+check("loose (unbound) model_mix phrasing is NOT flagged (fail-open; no generate:verify regression)", () => {
+  const r = validateInsightNumbers("Opus 4.8 led the mix this week; the long tail sat near 5%, the leader around 70%.", mixFixture());
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
+// The gap must NOT cross to a DIFFERENT model's number: cache-hit % sitting well past the
+// label (long gap) stays unbound (no false positive); a model label adjacent to a
+// non-share % within the gap binds to its OWN share and flags the mismatch.
+check("a far-away non-share percentage is not mis-bound to a model label (bounded gap)", () => {
+  const r = validateInsightNumbers("Opus 4.8 carried 70% of the mix; separately, cache hit ran at 95.4%.", mixFixture());
+  // 70 is Opus 4.8's share (bound, ok); 95.4 is avg_cache_hit_pct (whitelisted) and is
+  // NOT within the bounded gap of any model label → not bound, not flagged.
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
+// Binding owns SWAPS (valid-but-misattributed), not arbitrary numbers: a non-share % sitting
+// adjacent to a model label (e.g. cache-hit %) must NOT flag — only a value that IS ANOTHER
+// model's share is a swap. (A value matching no share is "fabricated" and already owned by the
+// whitelist scan.) Without this, the wide gap false-positives on legit "Opus 4.8 at 95.4%
+// cache hit" prose → silent template fallback. REDs on a bound-≠-own-share-only check.
+check("a non-share % adjacent to a model label is NOT flagged (binding owns swaps, not arbitrary numbers)", () => {
+  const r = validateInsightNumbers("Opus 4.8 at 95.4% cache hit; the mix held at 70%.", mixFixture());
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
 console.log(`\n${passed} insights-validate checks passed`);

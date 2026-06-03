@@ -13,6 +13,7 @@
  * ========================================================================== */
 
 import type { DashboardData } from "../../src/types";
+import { prettyModelId } from "../../src/shared/models";
 
 export interface ValidationResult {
   ok: boolean;
@@ -27,6 +28,9 @@ const REL_TOL = 0.01;
 
 /** Year tokens (4-digit 19xx/20xx) come from dates, not metrics — never fabrication. */
 const YEAR_RE = /^(?:19|20)\d{2}$/;
+
+/** Escape a literal string for use inside a RegExp (model labels carry a "." e.g. "Opus 4.7"). */
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Scale multipliers for a trailing k/K/M/B/m/b suffix ("$5M" => 5_000_000). We scale
  *  the mantissa BEFORE matching so a fabricated "$5M" cannot slip through merely because
@@ -103,5 +107,39 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
     if (suffix) value *= SCALE[suffix.toLowerCase()];
     if (!matchesAllowed(value, allowed)) offending.push(m[0].trim());
   }
+
+  // --- #24 PCN first cut: catch a SWAPPED model_mix version share. ---
+  // The whitelist scan above only asks "is this value a valid share SOMEWHERE?", so a
+  // SWAPPED attribution ("Opus 4.7 20%" when 20% is Opus 4.8's share) sails through —
+  // both values are valid shares. Here each model-version LABEL bound to a nearby % is a
+  // SWAP iff the value is NOT this version's own share but IS another version's share.
+  // Division of labour: the whitelist scan owns "not a valid number at all" (fabrication);
+  // this binding owns ONLY "valid-but-misattributed" — so a non-share number near a label
+  // (e.g. a cache-hit %) is left to the whitelist, never flagged here. Per-claim match
+  // reuses matchesAllowed's tolerance; markdown emphasis (**74.75%**) is stripped first.
+  //
+  // BINDING WINDOW: the label, then a BOUNDED gap of ≤16 non-digit/non-% chars, then the
+  // %. The gap spans the short connectors the live arcade voice uses ("Opus 4.7 AT 74%",
+  // "Opus 4.7: 74%", "Opus 4.7 — 74%") — observed 2026-06-03 — but because it admits NO
+  // digit it can never reach across another model's label (each has digits, e.g. "4.8")
+  // or another number; the ≤16 cap refuses long loose prose. DELIBERATELY fail-OPEN on
+  // UNBOUND numbers (loose phrasing, or "74% went to Opus 4.7" number-before-label, is
+  // uncovered) — defense-in-depth; the full inline-tag PCN protocol is the documented
+  // follow-up (#24). Fail-open + swap-only is what keeps this from false-positiving on
+  // legit prose (no generate:verify regression).
+  const flat = prose.replace(/[*_]+/g, "");
+  const mixEntries = Object.entries(data.distributions.model_mix);
+  for (const [id, share] of mixEntries) {
+    const label = prettyModelId(id);
+    if (label === id) continue; // unrecognised id shape — no label to bind against
+    const otherShares = mixEntries.filter(([oid]) => oid !== id).map(([, v]) => v);
+    const bindRe = new RegExp(`${escapeRe(label)}[^%\\d\\n\\r]{0,16}(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*%`, "gi");
+    for (const m of flat.matchAll(bindRe)) {
+      const bound = parseFloat(m[1]);
+      if (Number.isNaN(bound)) continue;
+      if (!matchesAllowed(bound, [share]) && matchesAllowed(bound, otherShares)) offending.push(m[0].trim());
+    }
+  }
+
   return { ok: offending.length === 0, offending };
 }

@@ -19,6 +19,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { DashboardData } from "../../src/types";
 import { allowedNumbers, validateInsightNumbers } from "./insightsValidate";
+import { prettyModelId } from "../../src/shared/models";
 
 const MODEL = "claude-opus-4-8";
 const MAX_RETRIES = 2;
@@ -27,16 +28,6 @@ const MAX_RETRIES = 2;
  *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
  *  this a prompt edit would serve STALE cached insights until the aggregates change. */
 export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice-2";
-
-/** "claude-opus-4-8" → "Opus 4.8" so the prompt feeds readable, version-distinct
- *  labels (the model was collapsing two Opus VERSIONS into an ambiguous
- *  "Opus X% and Y%"). Unknown shapes pass through unchanged. */
-function prettyModelId(id: string): string {
-  const m = /^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i.exec(id);
-  if (!m) return id;
-  const family = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
-  return `${family} ${m[2]}.${m[3]}`;
-}
 
 /** The stable, cacheable context block: the grounding facts + the rules. Built
  *  once per call; byte-identical across the regen retries so the cache holds. */
