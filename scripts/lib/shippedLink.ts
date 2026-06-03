@@ -38,7 +38,9 @@ export function cleanCommitSubject(raw: string): string {
     const cleaned = line.trim().replace(/^\$\(cat\s+<<-?\s*['"]?\w+['"]?\s+/, "").trim();
     if (cleaned) return cleaned;
   }
-  return raw.trim();
+  // #19: no real subject line found (wrapper-only / partial-heredoc capture). Return ""
+  // so the caller drops it — never echo the raw `$(cat <<'EOF'…` fragment as a "commit".
+  return "";
 }
 
 export type ShipEvent =
