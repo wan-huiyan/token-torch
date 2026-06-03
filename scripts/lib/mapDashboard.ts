@@ -15,6 +15,7 @@ import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
 import { computeBurnBands } from "../../src/shared/burnTier";
 import { loadPlanConfig } from "./plan";
+import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
 
 const SMALL_N_THRESHOLD = 10;
 
@@ -102,6 +103,15 @@ export function mapDashboard(
   const sessionsWithSubagents: string[] = [];
   const covered: string[] = [];
   const timingChecks: SubagentTimingCheck[] = [];
+  // context-overhead aggregate (Plan 8 / issue #10). Kept on the MAIN-LOOP input basis
+  // so per-session and aggregate use the same denominator (the floor is a main-loop
+  // quantity; subagent scaffolding is surfaced separately). reread_tokens summed from
+  // the per-session overheads → the verify() aggregate identity holds (no silent drop).
+  let ovRereadTok = 0;
+  let ovRereadUsd = 0;
+  let ovSubScaffoldTok = 0;
+  let ovTurns = 0;
+  let ovMainInputSide = 0;
 
   for (const rec of records) {
     fileCount += rec.rawProjectDirs.length; // transcripts merged for this session
@@ -122,6 +132,21 @@ export function mapDashboard(
     if (model_version) detail.model_version = model_version;
     detail.effort = effort;
     detail.data_tier = data_tier;
+
+    // ---- context overhead (Plan 8 / issue #10): keep detail + row in LOCKSTEP (L9). ----
+    const context_overhead = deriveContextOverhead({
+      scaffoldingFloor: rec.scaffoldingFloor,
+      turnCount: rec.turnCount,
+      perModelTokens: rec.perModelTokens,
+      subagentScaffoldingTokens: fb.subagentScaffoldingTokens,
+    });
+    detail.context_overhead = context_overhead;
+    ovRereadTok += context_overhead.reread_tokens;
+    ovRereadUsd += context_overhead.reread_usd;
+    ovSubScaffoldTok += context_overhead.subagent_scaffolding_tokens;
+    ovTurns += context_overhead.turns;
+    for (const t of Object.values(rec.perModelTokens))
+      ovMainInputSide += t.fresh_input + t.cache_write + t.cache_read;
 
     details.push(detail);
 
@@ -156,6 +181,7 @@ export function mapDashboard(
       model_versions,
       effort,
       data_tier,
+      context_overhead,
       top_tools: topTools(rec.toolCounts),
       detail_href: `/sessions/${detail.id}`,
     });
@@ -243,6 +269,20 @@ export function mapDashboard(
   const small_n = rows.length < SMALL_N_THRESHOLD;
   const generatedDate = generatedAtIso.slice(0, 10);
 
+  // aggregate context overhead (Plan 8 / issue #10): reread_tokens/$ summed from the
+  // per-session overheads (so the verify() aggregate identity holds); % over the summed
+  // MAIN-LOOP input side (same basis as each session). scaffolding_tokens is not
+  // additive across sessions, so the aggregate leaves it 0 — reread_tokens is the headline.
+  const context_overhead = {
+    scaffolding_tokens: 0,
+    reread_tokens: ovRereadTok,
+    reread_usd: round2(ovRereadUsd),
+    overhead_pct_of_input: ovMainInputSide > 0 ? round2((ovRereadTok / ovMainInputSide) * 100) : 0,
+    subagent_scaffolding_tokens: ovSubScaffoldTok,
+    turns: ovTurns,
+    note: OVERHEAD_NOTE,
+  };
+
   const totals: DashboardData["totals"] = {
     cost_usd,
     // Headline total is COMPLETE: displayed (kept) cost + the floored usage-bearing $.
@@ -264,6 +304,7 @@ export function mapDashboard(
     // transcripts — an estimate either way.
     time_saved_min: round2(timeSavedMin),
     time_saved_hours: round2(timeSavedMin / 60),
+    context_overhead,
   };
 
   const flags = buildFlags(totals, projects, rows);
