@@ -59,7 +59,7 @@ export function deriveBillingWindows(events: WindowEvent[], nowMs: number): Bill
       accs.push(cur);
     } else {
       const gap = e.ms - cur.lastMs;
-      if (gap <= GAP_IDLE_MS) cur.activeMs += gap; // active gaps (<120s) never straddle ⇒ Σ window == global total
+      if (gap <= GAP_IDLE_MS) cur.activeMs += gap; // active gap (≤120s) → current window; total_active_min := Σ window (by construction)
     }
     cur.eventCount++;
     cur.sessions.add(e.sessionId);
