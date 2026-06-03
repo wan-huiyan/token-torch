@@ -23,6 +23,21 @@ import { allowedNumbers, validateInsightNumbers } from "./insightsValidate";
 const MODEL = "claude-opus-4-8";
 const MAX_RETRIES = 2;
 
+/** BUMP on any prompt / rule / model-mix-format change. The insights cache key
+ *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
+ *  this a prompt edit would serve STALE cached insights until the aggregates change. */
+export const INSIGHTS_PROMPT_VERSION = "2026-06-03-model-version-labels";
+
+/** "claude-opus-4-8" → "Opus 4.8" so the prompt feeds readable, version-distinct
+ *  labels (the model was collapsing two Opus VERSIONS into an ambiguous
+ *  "Opus X% and Y%"). Unknown shapes pass through unchanged. */
+function prettyModelId(id: string): string {
+  const m = /^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i.exec(id);
+  if (!m) return id;
+  const family = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+  return `${family} ${m[2]}.${m[3]}`;
+}
+
 /** The stable, cacheable context block: the grounding facts + the rules. Built
  *  once per call; byte-identical across the regen retries so the cache holds. */
 function buildContextBlock(data: DashboardData): string {
@@ -46,7 +61,7 @@ function buildContextBlock(data: DashboardData): string {
     `- Active: ${t.active_hours}h; idle: ${t.idle_hours}h; time saved (parallel subagents, a floor): ${t.time_saved_hours}h`,
     `- Projects (top 5 by cost):`,
     projectLines,
-    `- Model mix (% of assistant messages): ${Object.entries(data.distributions.model_mix).map(([m, p]) => `${m} ${p}%`).join(", ")}`,
+    `- Model mix (% of assistant messages): ${Object.entries(data.distributions.model_mix).map(([m, p]) => `${prettyModelId(m)} ${p}%`).join(", ")}`,
     `- Full set of citable numbers: ${allowed}`,
     "",
     "HARD RULES:",
@@ -58,6 +73,7 @@ function buildContextBlock(data: DashboardData): string {
     "4. Costs are ESTIMATES from per-model list rates (the billing dashboard is authoritative). Say 'estimated' where natural.",
     "5. No superlatives or causal language ('because', 'caused', 'best') beyond what the numbers plainly show.",
     "6. Do NOT write any date, or any number (including incidental counts like 'top 3 projects') that is not in the citable list above — the validator rejects unlisted numbers and the UI already supplies the date. Spell out small structural counts as words if needed.",
+    "7. When citing the model mix, name each model VERSION explicitly as given (e.g. 'Opus 4.7', 'Opus 4.8', 'Sonnet 4.6'). NEVER merge two versions into one ambiguous phrase like 'Opus X% and Y%' — keep each version's share attached to its version label.",
     "",
     "FORMAT: markdown, starting with a bold header line, then 2–4 '- ' bullets. Keep it under 90 words.",
   ].join("\n");
@@ -80,7 +96,7 @@ async function callClaude(
   }
   const resp = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048, // headroom so adaptive thinking can't truncate the (short) note
     thinking: { type: "adaptive" },
     messages: [{ role: "user", content: userContent }],
   });

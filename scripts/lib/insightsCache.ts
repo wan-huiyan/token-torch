@@ -17,13 +17,15 @@ interface CacheFile {
 }
 
 /** Stable hash of the inputs the prose depends on: the whitelist of aggregate
- *  numbers (sorted) + the model id. Sessions[] is intentionally excluded — it
- *  is not part of the grounding, so it must not bust the cache. */
-export function insightsHash(data: DashboardData, model: string): string {
+ *  numbers (sorted) + the model id + the prompt version. Sessions[] is
+ *  intentionally excluded — it is not part of the grounding, so it must not bust
+ *  the cache. `promptVersion` folds the prompt's identity in so a prompt/rule
+ *  edit invalidates the cache (numbers alone don't change on a prompt-only edit). */
+export function insightsHash(data: DashboardData, model: string, promptVersion = ""): string {
   const nums = allowedNumbers(data)
     .map((n) => n.toFixed(4))
     .sort();
-  return createHash("sha256").update(model + "\n" + nums.join("\n")).digest("hex");
+  return createHash("sha256").update(model + "\n" + promptVersion + "\n" + nums.join("\n")).digest("hex");
 }
 
 /** Return cached prose iff the file exists and its hash matches; else null. */
