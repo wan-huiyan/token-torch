@@ -8,6 +8,9 @@ import {
   effortLabel,
   searchSessions,
   paginate,
+  breakdownGroups,
+  isMixedVersion,
+  SMALL_N,
 } from "../../src/dashboard/aggregate";
 import type { GroupBy } from "../../src/dashboard/aggregate";
 
@@ -156,6 +159,46 @@ check("prettyModel handles non-standard ids and empties", () => {
   assert.equal(prettyModel("claude-haiku-4-5-20251001"), "Haiku 4.5");
   assert.equal(prettyModel("gpt-4o"), "gpt-4o"); // passthrough
   assert.equal(prettyModel(""), "unknown");
+});
+
+// --- Plan 5: breakdownGroups + mixed-version exclusion ---
+check("isMixedVersion: >1 real Claude version → true; single/synthetic-only → false", () => {
+  assert.equal(isMixedVersion(row({ model_versions: { "claude-opus-4-8": 10, "claude-opus-4-7": 5 } })), true);
+  assert.equal(isMixedVersion(row({ model_versions: { "claude-opus-4-8": 10, "<synthetic>": 2 } })), false); // synthetic doesn't count
+  assert.equal(isMixedVersion(row({ model_versions: { "claude-opus-4-8": 10 } })), false);
+  assert.equal(isMixedVersion(row({})), false);
+});
+
+check("breakdownGroups(model) excludes mixed-version sessions and counts them", () => {
+  const rows = [
+    row({ id: "a", model_version: "claude-opus-4-8", model_versions: { "claude-opus-4-8": 20 }, cost_usd: 5 }),
+    row({ id: "b", model_version: "claude-opus-4-7", model_versions: { "claude-opus-4-7": 20 }, cost_usd: 3 }),
+    row({ id: "mix", model_version: "claude-opus-4-8", model_versions: { "claude-opus-4-8": 10, "claude-opus-4-7": 10 }, cost_usd: 9 }),
+  ];
+  const { groups, excludedMixed } = breakdownGroups(rows, "model");
+  assert.equal(excludedMixed, 1);
+  const keys = groups.map((g) => g.key).sort();
+  assert.deepEqual(keys, ["claude-opus-4-7", "claude-opus-4-8"]); // 'mix' excluded, not bucketed
+});
+
+check("breakdownGroups: per-group context — top_projects (≤3), effort_mix, axes, small_n", () => {
+  const rows = [
+    row({ id: "1", project: "proj-a", effort: { value: "high", source: "observed", confidence: "high" }, out_tokens: 100, time_saved_min: 4, top_tools: { Bash: 3, Read: 1 } }),
+    row({ id: "2", project: "proj-a", effort: { value: "high", source: "inferred_default", confidence: "low" }, out_tokens: 300, time_saved_min: 0, top_tools: { Bash: 1 } }),
+    row({ id: "3", project: "proj-b", effort: { value: "high", source: "observed", confidence: "high" }, out_tokens: 200, time_saved_min: 6, top_tools: {} }),
+  ];
+  const { groups } = breakdownGroups(rows, "effort"); // all "high" → one bucket of 3
+  const g = groups.find((x) => x.key === "high")!;
+  assert.equal(g.sessions, 3);
+  assert.equal(g.out_tokens, 600);
+  assert.equal(g.out_tokens_per_session, 200); // 600/3
+  assert.equal(g.tool_calls_per_session, Math.round(((3 + 1 + 1 + 0) / 3) * 10) / 10); // (4+1+0 tools)/3... Bash3+Read1=4, Bash1=1, 0 → 5/3
+  assert.equal(g.time_saved_min, 10);
+  assert.deepEqual(g.top_projects.map((p) => p.name), ["proj-a", "proj-b"]); // proj-a (2) before proj-b (1)
+  assert.ok(g.top_projects.length <= 3);
+  assert.equal(g.effort_mix["observed"], 2);
+  assert.equal(g.effort_mix["inferred_default"], 1);
+  assert.equal(g.small_n, 3 < SMALL_N); // true
 });
 
 console.log(`\naggregate.ts: ${passed} checks passed`);

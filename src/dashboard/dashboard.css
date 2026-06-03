@@ -421,3 +421,68 @@
 .co-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
 .co-bar > i { display: block; height: 100%; }
 .co-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
+
+/* ---- confound banner (Plan 5 T4) — prominent validity warning, amber register ---- */
+.confound { margin: 18px 0; padding: 14px 16px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-left: 4px solid var(--amber);
+  background: oklch(0.83 0.155 78 / .08); }
+.confound-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.confound-tag { font-family: var(--mono); font-size: .62rem; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--amber); }
+.confound-title { font-weight: 700; font-size: .98rem; color: var(--ink); }
+.confound-core { margin: 0; font-size: .9rem; line-height: 1.5; color: var(--ink-dim); }
+.confound-core strong { color: var(--ink); }
+.confound-extra { margin: 8px 0 0; font-family: var(--mono); font-size: .76rem; line-height: 1.5; color: var(--ink-faint); }
+.confound-extra strong { color: var(--ink-dim); }
+
+/* ---- cost heatmap (Plan 5 T5, B5) — single-hue amber ramp, redundant text labels ---- */
+.hm-wrap { overflow-x: auto; }
+.hm { border-collapse: separate; border-spacing: 4px; }
+.hm th { font-family: var(--mono); font-size: .72rem; color: var(--ink-dim); font-weight: 700; }
+.hm-col { text-transform: capitalize; padding: 4px 8px; text-align: center; }
+.hm-row { text-align: right; padding: 4px 10px 4px 0; white-space: nowrap; }
+.hm-corner { width: 1px; }
+.hm-cell { width: 92px; height: 52px; border-radius: 8px; border: 1px solid var(--line-soft);
+  text-align: center; vertical-align: middle; }
+.hm-val { display: block; font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--ink); }
+.hm-n { display: block; font-family: var(--mono); font-size: .6rem; color: var(--ink-dim); margin-top: 1px; }
+.hm-small { opacity: .82; border-style: dashed; } /* n < SMALL_N → muted, still shows $ + n */
+.hm-empty { background:
+    repeating-linear-gradient(45deg, transparent, transparent 5px, var(--line-soft) 5px, var(--line-soft) 6px); }
+.hm-dot { font-family: var(--mono); font-size: 1rem; color: var(--ink-faint); }
+.hm-cap { font-family: var(--mono); font-size: .72rem; line-height: 1.5; color: var(--ink-dim); margin-top: 12px; max-width: 640px; }
+.hm-est { color: var(--amber); font-weight: 700; margin-right: 4px; }
+/* fallback bar list when the grid can't form 2×2 */
+.hm-fallback { display: grid; gap: 10px; }
+.hm-fb-row { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto; align-items: center; gap: 12px; }
+.hm-fb-label { font-family: var(--mono); font-size: .8rem; color: var(--ink-dim); }
+.hm-fb-bar { height: 10px; border-radius: 5px; background: var(--line-soft); overflow: hidden; }
+.hm-fb-bar > i { display: block; height: 100%; }
+.hm-fb-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); }
+
+/* ---- breakdown page (Plan 5 T6) ---- */
+.bd-back { display: inline-block; margin: 6px 0 4px; background: none; border: none; cursor: pointer;
+  color: var(--cyan); padding: 0; }
+.bd-excluded { font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); margin: 6px 0 2px; }
+.dist-link { display: inline-block; margin-top: 8px; font-family: var(--mono); font-size: .74rem;
+  color: var(--cyan); text-decoration: none; }
+.dist-link:hover { text-decoration: underline; }
+.bd-cards { display: grid; gap: 14px; }
+.bd-card { padding: 14px 16px; border: 1px solid var(--line-soft); border-radius: 12px;
+  background: var(--panel, rgba(255,255,255,.03)); }
+.bd-illus { border-style: dashed; }
+.bd-card-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.bd-card-label { font-weight: 700; font-size: 1rem; }
+.bd-card-meta { font-family: var(--mono); font-size: .74rem; color: var(--ink-dim); }
+.bd-illus-tag { font-family: var(--mono); font-size: .68rem; color: var(--amber); }
+.bd-context { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 12px;
+  font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); }
+.bd-context b { color: var(--ink-dim); font-weight: 700; }
+.bd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 18px; }
+.bd-metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bd-metric-label { font-family: var(--mono); font-size: .7rem; letter-spacing: .03em; color: var(--ink-faint); }
+.bd-metric-val { font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--ink); }
+.bd-est { color: var(--amber); font-size: .62rem; font-weight: 700; }
+.bd-metric-bar { height: 7px; border-radius: 5px; background: var(--line-soft); overflow: hidden; margin-top: 5px; }
+.bd-metric-bar > i { display: block; height: 100%; }

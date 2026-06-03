@@ -168,6 +168,10 @@ export interface SessionRow {
   detail_href: string; // e.g. "sessions/<id>.html" or route "/sessions/:id"
   /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
   context_overhead?: ContextOverhead;
+  /** Plan 5 — optional + additive; output tokens this session (= detail.tokens.output). */
+  out_tokens?: number;
+  /** Plan 5 — optional + additive; parallel-subagent time saved this session (min). */
+  time_saved_min?: number;
 }
 
 export interface Flag {

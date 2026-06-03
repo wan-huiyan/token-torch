@@ -213,6 +213,21 @@ function verify(
     `✓ data_tier coverage: all ${dashboard.sessions.length} sessions tiered (${enriched} enriched, ${dashboard.sessions.length - enriched} jsonl)`,
   );
 
+  // ---- Plan 5: breakdown integrity + synthetic-absent ----
+  // <synthetic> (and other non-real ids) must NOT appear in the model-mix legend
+  // (the source filter renormalizes the kept shares). Every real model id is "claude-*".
+  for (const id of Object.keys(dashboard.distributions.model_mix))
+    if (!/^claude-/.test(id))
+      throw new Error(`model_mix contains a non-real model id "${id}" — Plan 5 source filter broke`);
+  // count mixed-version sessions (>1 real version) — excluded from model buckets, not dominant-bucketed.
+  const realVers = (mv?: Record<string, number>) =>
+    Object.keys(mv ?? {}).filter((k) => /^claude-/.test(k));
+  const mixedVersion = dashboard.sessions.filter((s) => realVers(s.model_versions).length > 1).length;
+  checks.push(
+    `✓ breakdown integrity: model_mix has only claude-* ids; ` +
+      `${dashboard.sessions.length - mixedVersion} single-version + ${mixedVersion} mixed (excluded from model buckets)`,
+  );
+
   // ---- burn-tier band coverage (issue #6) ----
   // burnTier() falls back to the absolute {campfire:200, inferno:300} thresholds when no
   // bands are supplied (old-fixture back-compat). Unit tests pass explicit bands, so a

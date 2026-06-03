@@ -78,4 +78,26 @@ check("mapDashboard attaches context_overhead to rows, details, and aggregates t
   assert.equal(dashboard.totals.context_overhead?.reread_tokens, 120000);
 });
 
+check("model_mix excludes <synthetic> and renormalizes to ~100 (Plan 5, closes #4)", () => {
+  const a = baseRec({ id: "mm000001", modelMsgCounts: { "claude-opus-4-8": 10 } });
+  const b = baseRec({ id: "mm000002", modelMsgCounts: { "claude-opus-4-8": 8, "<synthetic>": 2 } });
+  const { dashboard } = mapDashboard([a, b], new Map(), "2026-06-03T00:00:00.000Z", floor, emptyDir, settings);
+  const mix = dashboard.distributions.model_mix;
+  assert.equal(mix["<synthetic>"], undefined, "<synthetic> must not appear in model_mix");
+  const sum = Object.values(mix).reduce((s, v) => s + v, 0);
+  assert.ok(Math.abs(sum - 100) < 0.5, `model_mix should renormalize to ~100, got ${sum}`);
+});
+
+check("out_tokens + time_saved_min populated on the row (Plan 5 axes)", () => {
+  // detail.tokens.output derives from perModelTokens (the cost source), so set it there.
+  const rec = baseRec({
+    id: "ax000001",
+    perModelTokens: { "claude-opus-4-8": { fresh_input: 100, output: 4242, cache_write: 0, cache_read: 0 } },
+  });
+  const { dashboard } = mapDashboard([rec], new Map(), "2026-06-03T00:00:00.000Z", floor, emptyDir, settings);
+  const row = dashboard.sessions.find((r) => r.id === "ax000001")!;
+  assert.equal(row.out_tokens, 4242);
+  assert.equal(typeof row.time_saved_min, "number"); // 0 with no subagents
+});
+
 console.log(`\n${passed} mapDashboard.slice checks passed`);

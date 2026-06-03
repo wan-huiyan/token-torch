@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DashboardData, SessionDetailData } from "./types";
 import { dashboardFixture, sessionDemo } from "./fixtures";
 import { DashboardPage } from "./dashboard/DashboardPage";
+import { BreakdownPage } from "./dashboard/BreakdownPage";
 import { SessionPage } from "./session/SessionPage";
 
 /* ---------------------------------------------------------------------------
@@ -10,14 +11,17 @@ import { SessionPage } from "./session/SessionPage";
  * that's absent (generator not run), it falls back to the typed prototype
  * fixtures so the UI always renders.
  *   #/                → dashboard
+ *   #/breakdown       → descriptive breakdown (project/week/model/effort)
  *   #/sessions/:id    → session detail
  * ------------------------------------------------------------------------- */
 
-type Route = { name: "dashboard" } | { name: "session"; id: string };
+type Route = { name: "dashboard" } | { name: "breakdown" } | { name: "session"; id: string };
 
 function parseHash(): Route {
   const m = window.location.hash.match(/^#\/sessions\/([^/?#]+)/);
-  return m ? { name: "session", id: decodeURIComponent(m[1]) } : { name: "dashboard" };
+  if (m) return { name: "session", id: decodeURIComponent(m[1]) };
+  if (/^#\/breakdown/.test(window.location.hash)) return { name: "breakdown" };
+  return { name: "dashboard" };
 }
 
 const go = (hash: string) => {
@@ -115,6 +119,9 @@ export function App() {
     return <SessionRoute id={route.id} onBack={() => go("#/")} />;
   }
   if (dashboard.status !== "ready") return <Loading />;
+  if (route.name === "breakdown") {
+    return <BreakdownPage data={dashboard.data} onBack={() => go("#/")} />;
+  }
   return (
     <DashboardPage data={dashboard.data} onOpenSession={(id) => go(`#/sessions/${encodeURIComponent(id)}`)} />
   );
