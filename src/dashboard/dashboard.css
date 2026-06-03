@@ -421,3 +421,17 @@
 .co-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
 .co-bar > i { display: block; height: 100%; }
 .co-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
+
+/* ---- confound banner (Plan 5 T4) — prominent validity warning, amber register ---- */
+.confound { margin: 18px 0; padding: 14px 16px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-left: 4px solid var(--amber);
+  background: oklch(0.83 0.155 78 / .08); }
+.confound-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.confound-tag { font-family: var(--mono); font-size: .62rem; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--amber); }
+.confound-title { font-weight: 700; font-size: .98rem; color: var(--ink); }
+.confound-core { margin: 0; font-size: .9rem; line-height: 1.5; color: var(--ink-dim); }
+.confound-core strong { color: var(--ink); }
+.confound-extra { margin: 8px 0 0; font-family: var(--mono); font-size: .76rem; line-height: 1.5; color: var(--ink-faint); }
+.confound-extra strong { color: var(--ink-dim); }
