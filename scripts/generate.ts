@@ -243,6 +243,39 @@ function verify(
     `✓ burn_bands present & distribution-relative (campfire $${bands.campfire}, inferno $${bands.inferno})`,
   );
 
+  // ---- Plan 8 / issue #10: context-overhead bound ----
+  // PROVABLE: per session, the base-context floor re-read total cannot exceed the
+  // input-side tokens that session actually paid for (fresh + cache_write + cache_read).
+  // (scaffolding_tokens is a one-turn subset; floor*turns <= total cache_read <= input side.)
+  let overheadSessions = 0;
+  for (const d of details) {
+    const co = d.context_overhead;
+    if (!co) continue;
+    overheadSessions++;
+    const inputSide = d.tokens.fresh_input + d.tokens.cache_write + d.tokens.cache_read;
+    if (co.reread_tokens > inputSide + 1)
+      throw new Error(
+        `[${d.id}] context-overhead reread_tokens ${co.reread_tokens} exceeds input-side tokens ${inputSide} — floor mis-derived`,
+      );
+    if (co.scaffolding_tokens > inputSide + 1)
+      throw new Error(
+        `[${d.id}] context-overhead scaffolding_tokens ${co.scaffolding_tokens} exceeds input-side tokens ${inputSide}`,
+      );
+  }
+  if (overheadSessions) {
+    // aggregate sanity: dashboard total reread_tokens == Σ per-session (no silent drop).
+    const aggTok = details.reduce((s, d) => s + (d.context_overhead?.reread_tokens ?? 0), 0);
+    if ((dashboard.totals.context_overhead?.reread_tokens ?? 0) !== aggTok)
+      throw new Error(
+        `context-overhead aggregate reread_tokens ${dashboard.totals.context_overhead?.reread_tokens} != Σ per-session ${aggTok}`,
+      );
+    checks.push(
+      `✓ context-overhead bound holds for ${overheadSessions} session(s); ` +
+        `aggregate re-read ${aggTok.toLocaleString()} tok ($${dashboard.totals.context_overhead?.reread_usd} est), ` +
+        `overhead ${dashboard.totals.context_overhead?.overhead_pct_of_input}% of input`,
+    );
+  }
+
   // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
   // must trace to a dashboard-level aggregate (the honesty gate). Template path
   // (or null) is a no-op pass — templates only emit numbers from the same source.

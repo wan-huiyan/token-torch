@@ -412,3 +412,12 @@
 .pb-track > i { display: block; height: 100%; }
 .pb-cap { font-family: var(--mono); font-size: .78rem; color: var(--ink-dim); }
 .pb-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
+
+/* Plan 8 / issue #10 — context overhead panel */
+.co-grid { display: flex; gap: 28px; flex-wrap: wrap; }
+.co-stat { min-width: 170px; }
+.co-big { font-size: 1.8rem; font-weight: 700; color: var(--amber); line-height: 1.1; }
+.co-cap { font-size: .78rem; color: var(--ink-dim); margin-top: 2px; }
+.co-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
+.co-bar > i { display: block; height: 100%; }
+.co-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }

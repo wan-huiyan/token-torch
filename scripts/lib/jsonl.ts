@@ -45,6 +45,8 @@ export interface JsonlFallbackResult {
   available: boolean; // at least one transcript found
   /** subagent tokens split by the agent's dominant model (Option B per-model pricing). */
   subagentPerModelTokens: Record<string, TokenSet>;
+  /** Σ per-dispatch base-context floor across this session's subagents (the N× catalog cost, tokens). */
+  subagentScaffoldingTokens: number;
 }
 
 const EMPTY: JsonlFallbackResult = {
@@ -55,6 +57,7 @@ const EMPTY: JsonlFallbackResult = {
   fileCount: 0,
   available: false,
   subagentPerModelTokens: {},
+  subagentScaffoldingTokens: 0,
 };
 
 const MS_PER_MIN = 60_000;
@@ -112,12 +115,13 @@ function walkAgentFiles(dir: string, out: string[]): void {
   }
 }
 
-interface AgentParse {
+export interface AgentParse {
   startMs: number;
   endMs: number;
   tokens: TokenSet;
   totalTokens: number;
   model: string; // dominant model id of this agent's kept assistant messages (lowercased)
+  scaffoldingFloor: number; // min nonzero cache_read across this dispatch's turns (base-context floor, issue #10)
   firstUserText?: string; // the task prompt handed to the subagent
 }
 
@@ -133,7 +137,7 @@ function contentText(content: unknown): string {
 
 /** Parse one agent transcript: span from raw timestamps; tokens deduped by
  *  message.id keeping the highest-output chunk (flat over the whole file). */
-function parseAgentFile(path: string): AgentParse | null {
+export function parseAgentFile(path: string): AgentParse | null {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -181,18 +185,23 @@ function parseAgentFile(path: string): AgentParse | null {
   // and tally the dominant model across the deduped messages.
   const tokens: TokenSet = { fresh_input: 0, output: 0, cache_write: 0, cache_read: 0 };
   const modelCount: Record<string, number> = {};
+  // base-context floor for THIS dispatch (min nonzero cache_read across its turns).
+  // Re-paid per dispatch → summed across a session's subagents = the "N× catalog" cost.
+  let scaffoldingFloor = 0;
   for (const [id, u] of usageById) {
     const t = extractUsageTokens(u);
     tokens.fresh_input += t.fresh_input;
     tokens.output += t.output;
     tokens.cache_write += t.cache_write;
     tokens.cache_read += t.cache_read;
+    if (t.cache_read > 0)
+      scaffoldingFloor = scaffoldingFloor === 0 ? t.cache_read : Math.min(scaffoldingFloor, t.cache_read);
     const mdl = modelById.get(id) ?? "unknown";
     modelCount[mdl] = (modelCount[mdl] ?? 0) + 1;
   }
   const totalTokens = tokens.fresh_input + tokens.output + tokens.cache_write + tokens.cache_read;
   const model = Object.entries(modelCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
-  return { startMs, endMs, tokens, totalTokens, model, firstUserText };
+  return { startMs, endMs, tokens, totalTokens, model, scaffoldingFloor, firstUserText };
 }
 
 function readMeta(agentPath: string): { description?: string; agentType?: string } {
@@ -285,9 +294,12 @@ export function extractFromJsonl(
   const subagentTimings: SubagentDispatch[] = [];
   // per-model subagent tokens over the SAME deduped agent set the cost uses.
   const subagentPerModelTokens: Record<string, TokenSet> = {};
+  // Σ per-dispatch base-context floor (the N× catalog cost, issue #10).
+  let subagentScaffoldingTokens = 0;
   for (const { path, parse } of best.values()) {
     spans.push([parse.startMs, parse.endMs]);
     sumMs += parse.endMs - parse.startMs;
+    subagentScaffoldingTokens += parse.scaffoldingFloor;
     const idMatch = /agent-([0-9a-f]+)\.jsonl$/i.exec(path);
     subagentTimings.push({
       id: (idMatch?.[1] ?? basename(path)).slice(0, 8),
@@ -310,6 +322,7 @@ export function extractFromJsonl(
     fileCount: best.size,
     available: true,
     subagentPerModelTokens,
+    subagentScaffoldingTokens,
   };
 }
 

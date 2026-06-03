@@ -36,6 +36,22 @@ export interface BurnBands {
   inferno: number;
 }
 
+/** Fixed base-context cost: the system prompt + tool/skill catalog (+ earliest
+ *  cached conversation) re-read into every turn and every subagent dispatch.
+ *  Always an ESTIMATE (cache-read floor; understates after TTL re-writes, and is
+ *  blind to deferred-tool-loading re-writes). The UI tags it [estimate]. The floor
+ *  is a SMALL fixed slice — accumulating conversation history dominates spend; this
+ *  is NOT framed as "the main waste". See docs/calibration/2026-06-03-context-overhead-calibration.md. */
+export interface ContextOverhead {
+  scaffolding_tokens: number;          // base context re-read each turn (min nonzero cache_read)
+  reread_tokens: number;               // scaffolding_tokens * turns (main loop) — ESTIMATE
+  reread_usd: number;                  // reread_tokens priced at the cache_read rate (per-model)
+  overhead_pct_of_input: number;       // 0–100: reread_tokens / total input-side tokens (fresh+cw+cr)
+  subagent_scaffolding_tokens: number; // Σ per-dispatch base-context floor across subagents (the N× story; 0 if none)
+  turns: number;                       // turns that re-read the prefix
+  note: string;                        // explicit estimate/scope caveat copy
+}
+
 /* ----------------------------- Dashboard ----------------------------------- */
 
 export interface DashboardData {
@@ -82,6 +98,8 @@ export interface DashboardData {
     tokens: { input_fresh: number; cache_read: number; output: number };
     time_saved_min: number; // est. wall-clock saved by parallel subagents
     time_saved_hours: number;
+    /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
+    context_overhead?: ContextOverhead;
   };
   projects: ProjectRow[]; // pre-sorted by cost desc (powers the podium)
   timeline: TimelinePoint[];
@@ -148,6 +166,8 @@ export interface SessionRow {
   data_tier?: "enriched" | "jsonl" | "thin"; // provenance of this row's numbers (drives a badge)
   top_tools: Record<string, number>;
   detail_href: string; // e.g. "sessions/<id>.html" or route "/sessions/:id"
+  /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
+  context_overhead?: ContextOverhead;
 }
 
 export interface Flag {
@@ -224,6 +244,8 @@ export interface SessionDetailData {
   model_version?: string;
   effort?: EffortTag;
   data_tier?: "enriched" | "jsonl" | "thin";
+  /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
+  context_overhead?: ContextOverhead;
 }
 
 export type CostCategory = "fresh_input" | "cache_write" | "cache_read" | "output";

@@ -65,6 +65,8 @@ export interface ParsedTranscript {
   modelMsgCounts: Record<string, number>;    // model id → kept assistant msg count
   toolCounts: Record<string, number>;
   assistantMsgCount: number;                 // deduped, non-sidechain
+  scaffoldingFloor: number;                  // min nonzero cache_read across kept turns = base context re-read each turn (0 if none)
+  turnCount: number;                         // count of kept turns with cache_read > 0
   timestampsMs: number[];                    // ALL row timestamps, sorted asc
   ccVersion?: string;
   observedEffort?: string;                   // value from a /effort local-command-stdout marker, if any (last-write-wins)
@@ -119,6 +121,12 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
   const perModelTokens: Record<string, TokenSet> = {};
   const modelMsgCounts: Record<string, number> = {};
   const toolCounts: Record<string, number> = {};
+  // scaffolding floor: the smallest nonzero cache_read across kept turns is the
+  // base-context prefix (system prompt + tool/skill catalog + earliest convo) re-read
+  // on EVERY turn. Calibrated; see docs/calibration/2026-06-03-context-overhead-calibration.md.
+  // Running min (not Math.min(...spread)) to stay safe on very long sessions.
+  let scaffoldingFloor = 0;
+  let turnCount = 0;
   for (const { usage, model, content } of bestMsg.values()) {
     const t = extractUsageTokens(usage);
     addInto(tokens, t);
@@ -126,11 +134,17 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     addInto(perModelTokens[model], t);
     modelMsgCounts[model] = (modelMsgCounts[model] ?? 0) + 1;
     collectTools(content, toolCounts);
+    if (t.cache_read > 0) {
+      turnCount++;
+      scaffoldingFloor = scaffoldingFloor === 0 ? t.cache_read : Math.min(scaffoldingFloor, t.cache_read);
+    }
   }
 
   return {
     tokens, perModelTokens, modelMsgCounts, toolCounts,
     assistantMsgCount: bestMsg.size,
+    scaffoldingFloor,
+    turnCount,
     timestampsMs: timestamps.sort((a, b) => a - b),
     ccVersion,
     ...(observedEffort ? { observedEffort } : {}),
@@ -198,6 +212,8 @@ export interface SessionRecord {
   activeMin: number;
   idleMin: number;
   assistantMsgCount: number;
+  scaffoldingFloor: number; // min nonzero cache_read across turns (base-context floor, issue #10)
+  turnCount: number;        // turns that read the cached prefix
   toolCounts: Record<string, number>;
   hasUsage: boolean;
   ccVersion?: string;
@@ -230,8 +246,10 @@ export interface IngestCache {
 /** On-disk cache envelope. Bump CACHE_VERSION whenever the cached ParsedTranscript
  *  blob shape changes — a stale cache would silently serve the OLD shape. v2 added
  *  `observedEffort`; a v1/legacy cache lacking it would downgrade observed sessions
- *  to inferred_default (an L9-class silent loss), so we discard on mismatch. */
-export const CACHE_VERSION = 2;
+ *  to inferred_default (an L9-class silent loss), so we discard on mismatch. v3 added
+ *  scaffoldingFloor/turnCount; a v2 cache lacking them would serve 0 (silent
+ *  under-report of context overhead), so we discard on mismatch. */
+export const CACHE_VERSION = 3;
 interface CacheFile { version: number; entries: IngestCache; }
 
 export const cacheKeyFor = (path: string): string => path;
@@ -298,6 +316,8 @@ export function buildSessionRecord(args: {
     activeMin: t.activeMin,
     idleMin: t.idleMin,
     assistantMsgCount: parsed.assistantMsgCount,
+    scaffoldingFloor: parsed.scaffoldingFloor,
+    turnCount: parsed.turnCount,
     toolCounts: parsed.toolCounts,
     hasUsage: tot > 0,
     ccVersion: parsed.ccVersion,
