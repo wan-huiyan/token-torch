@@ -47,8 +47,6 @@ export interface JsonlFallbackResult {
   subagentPerModelTokens: Record<string, TokenSet>;
   /** Σ per-dispatch base-context floor across this session's subagents (the N× catalog cost, tokens). */
   subagentScaffoldingTokens: number;
-  /** count of subagent dispatches that read a cached prefix (used for the per-dispatch story). */
-  subagentDispatchTurns: number;
 }
 
 const EMPTY: JsonlFallbackResult = {
@@ -60,7 +58,6 @@ const EMPTY: JsonlFallbackResult = {
   available: false,
   subagentPerModelTokens: {},
   subagentScaffoldingTokens: 0,
-  subagentDispatchTurns: 0,
 };
 
 const MS_PER_MIN = 60_000;
@@ -299,12 +296,10 @@ export function extractFromJsonl(
   const subagentPerModelTokens: Record<string, TokenSet> = {};
   // Σ per-dispatch base-context floor (the N× catalog cost, issue #10).
   let subagentScaffoldingTokens = 0;
-  let subagentDispatchTurns = 0;
   for (const { path, parse } of best.values()) {
     spans.push([parse.startMs, parse.endMs]);
     sumMs += parse.endMs - parse.startMs;
     subagentScaffoldingTokens += parse.scaffoldingFloor;
-    if (parse.scaffoldingFloor > 0) subagentDispatchTurns += 1;
     const idMatch = /agent-([0-9a-f]+)\.jsonl$/i.exec(path);
     subagentTimings.push({
       id: (idMatch?.[1] ?? basename(path)).slice(0, 8),
@@ -328,7 +323,6 @@ export function extractFromJsonl(
     available: true,
     subagentPerModelTokens,
     subagentScaffoldingTokens,
-    subagentDispatchTurns,
   };
 }
 
