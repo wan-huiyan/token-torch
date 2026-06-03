@@ -91,4 +91,16 @@ check("cleanCommitSubject: simple plain subject passes through unchanged", () =>
   assert.equal(cleanCommitSubject("feat: simple subject"), "feat: simple subject");
 });
 
+// #19: an inline capture over an off-line / partial heredoc can yield a wrapper-only
+// fragment with NO real subject line. The old `raw.trim()` fallback echoed it verbatim
+// (garbled rows in the UI). It must resolve to "" so the caller drops it.
+check("cleanCommitSubject: lone wrapper-opener fragment → empty (drop, don't echo)", () => {
+  assert.equal(cleanCommitSubject("$(cat <<'"), "");
+  assert.equal(cleanCommitSubject("$(cat <<'EOF'…)"), "");
+});
+
+check("cleanCommitSubject: all-wrapper blob (no real subject line) → empty", () => {
+  assert.equal(cleanCommitSubject("$(cat <<'EOF'\nEOF\n)"), "");
+});
+
 console.log(`${passed} shippedLink checks passed`);

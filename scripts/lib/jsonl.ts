@@ -429,12 +429,19 @@ export function extractShipped(
             // a numberless `gh pr merge` (current branch, e.g. `--auto`) still closes the active PR
             if (!numbered) events.push({ kind: "pr_merge" });
           }
-          const heredocSubs = [...cmd.matchAll(COMMIT_HEREDOC_RE)].map((m) => cleanCommitSubject(m[1]));
-          if (heredocSubs.length) {
-            for (const s of heredocSubs) events.push({ kind: "commit", subject: s });
+          // Mutual exclusivity stays keyed on raw heredoc MATCHES (heredoc wins when present);
+          // #19 backstop: drop any capture that cleans to "" (wrapper-only/partial-heredoc fragment).
+          const heredocMatches = [...cmd.matchAll(COMMIT_HEREDOC_RE)];
+          if (heredocMatches.length) {
+            for (const m of heredocMatches) {
+              const s = cleanCommitSubject(m[1]);
+              if (s) events.push({ kind: "commit", subject: s });
+            }
           } else {
-            for (const mm of cmd.matchAll(COMMIT_INLINE_RE))
-              events.push({ kind: "commit", subject: cleanCommitSubject(mm[1] ?? mm[2]) });
+            for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) {
+              const s = cleanCommitSubject(mm[1] ?? mm[2]);
+              if (s) events.push({ kind: "commit", subject: s });
+            }
           }
         } else if (name === "Write" || name === "Edit" || name === "NotebookEdit") {
           const fp: string = input.file_path ?? input.notebook_path ?? "";
