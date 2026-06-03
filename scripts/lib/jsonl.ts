@@ -429,8 +429,13 @@ export function extractShipped(
             // a numberless `gh pr merge` (current branch, e.g. `--auto`) still closes the active PR
             if (!numbered) events.push({ kind: "pr_merge" });
           }
-          for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) events.push({ kind: "commit", subject: cleanCommitSubject(mm[1] ?? mm[2]) });
-          for (const mm of cmd.matchAll(COMMIT_HEREDOC_RE)) events.push({ kind: "commit", subject: cleanCommitSubject(mm[1]) });
+          const heredocSubs = [...cmd.matchAll(COMMIT_HEREDOC_RE)].map((m) => cleanCommitSubject(m[1]));
+          if (heredocSubs.length) {
+            for (const s of heredocSubs) events.push({ kind: "commit", subject: s });
+          } else {
+            for (const mm of cmd.matchAll(COMMIT_INLINE_RE))
+              events.push({ kind: "commit", subject: cleanCommitSubject(mm[1] ?? mm[2]) });
+          }
         } else if (name === "Write" || name === "Edit" || name === "NotebookEdit") {
           const fp: string = input.file_path ?? input.notebook_path ?? "";
           if (fp) filesTouched.add(fp);

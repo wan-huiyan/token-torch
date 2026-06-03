@@ -107,4 +107,42 @@ check("extractShipped: heredoc-wrapped commit appears ONCE with the clean subjec
   assert.ok(!titles.some((t) => t.startsWith("$(cat")), "no commit title may start with $(cat");
 });
 
+check('extractShipped: heredoc commit with embedded quotes in subject yields EXACTLY ONE commit — no truncated duplicate', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ship-heredoc-quotes-'));
+  const sid = 'cc001234';
+  const rec = (ts: string, content: any[]) =>
+    JSON.stringify({ timestamp: ts, message: { content } });
+  const bash = (cmd: string) => ({ type: 'tool_use', name: 'Bash', input: { command: cmd } });
+  const result = (txt: string) => ({ type: 'tool_result', content: txt });
+  // This is the real bug: COMMIT_INLINE_RE "([^"]+)" truncates at the first " inside the subject.
+  // e.g. subject = fix(actions): methodology aside — "other eight" -> "other seven"
+  //      inline capture stops at the first " after the opening " → "fix(actions): methodology aside — "
+  //      heredoc capture = full subject
+  //      The two are distinct strings, so uniqBy keeps both → near-duplicate row.
+  const fullSubject = 'fix(actions): methodology aside — "other eight" -> "other seven"';
+  // Use real newlines so COMMIT_HEREDOC_RE (\n in the pattern) can match the heredoc form.
+  const heredocCmd = `git commit -m "$(cat <<'EOF'\n${fullSubject}\nbody text\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\nEOF\n)"`;
+  const lines = [
+    rec('2026-06-03T12:00:00Z', [bash('git commit -m "feat: initial"')]),
+    rec('2026-06-03T12:01:00Z', [bash('gh pr create --title "Fix actions"')]),
+    rec('2026-06-03T12:01:05Z', [result('https://github.com/wan-huiyan/token-torch/pull/864')]),
+    rec('2026-06-03T12:02:00Z', [bash(heredocCmd)]),
+    rec('2026-06-03T12:03:00Z', [bash('gh pr merge 864 --squash')]),
+  ];
+  writeFileSync(join(dir, sid + '.jsonl'), lines.join('\n'));
+  mkdirSync(join(dir, sid, 'subagents'), { recursive: true });
+  const index = new Map<string, string[]>([[sid, [join(dir, sid)]]]);
+
+  const sh = extractShipped(sid, index)!;
+  const pr864 = sh.prs?.find((p) => p.ref === '#864');
+  assert.ok(pr864, 'PR #864 must exist');
+  const commits = pr864!.commits ?? [];
+  const titles = commits.map((c) => c.title);
+  // EXACTLY 2 commits — "feat: initial" + full heredoc subject. No truncated duplicate.
+  assert.equal(commits.length, 2, `Expected 2 commits but got ${commits.length}: ${JSON.stringify(titles)}`);
+  assert.equal(titles[0], 'feat: initial');
+  assert.equal(titles[1], fullSubject, `Expected full subject but got: ${JSON.stringify(titles[1])}`);
+  assert.ok(!titles.some((t) => t.includes('$(cat')), 'no commit title may contain $(cat');
+});
+
 console.log(`\n${passed} jsonl checks passed`);

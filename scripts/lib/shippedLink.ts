@@ -13,12 +13,9 @@
  * These sessions commit via:
  *   git commit -m "$(cat <<'EOF'\n<subject>\n<body>\nCo-Authored-By: …\nEOF\n)"
  *
- * That one command is matched by BOTH regexes:
- *   COMMIT_INLINE_RE  → captures the whole garbled blob `$(cat <<'EOF'\n<subject>\n…`
- *   COMMIT_HEREDOC_RE → captures the clean `<subject>`
- *
- * By cleaning both at the push site, both forms normalize to the same string,
- * and the downstream uniqBy(…, c => c.title) collapses them to ONE entry.
+ * The extractShipped caller makes heredoc and inline captures mutually exclusive
+ * per command (heredoc wins when present), so this function only needs to strip
+ * any residual wrapper tokens that survive in an inline capture.
  */
 export function cleanCommitSubject(raw: string): string {
   const lines = raw.split("\n");
