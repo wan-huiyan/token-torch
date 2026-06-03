@@ -435,3 +435,28 @@
 .confound-core strong { color: var(--ink); }
 .confound-extra { margin: 8px 0 0; font-family: var(--mono); font-size: .76rem; line-height: 1.5; color: var(--ink-faint); }
 .confound-extra strong { color: var(--ink-dim); }
+
+/* ---- cost heatmap (Plan 5 T5, B5) — single-hue amber ramp, redundant text labels ---- */
+.hm-wrap { overflow-x: auto; }
+.hm { border-collapse: separate; border-spacing: 4px; }
+.hm th { font-family: var(--mono); font-size: .72rem; color: var(--ink-dim); font-weight: 700; }
+.hm-col { text-transform: capitalize; padding: 4px 8px; text-align: center; }
+.hm-row { text-align: right; padding: 4px 10px 4px 0; white-space: nowrap; }
+.hm-corner { width: 1px; }
+.hm-cell { width: 92px; height: 52px; border-radius: 8px; border: 1px solid var(--line-soft);
+  text-align: center; vertical-align: middle; }
+.hm-val { display: block; font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--ink); }
+.hm-n { display: block; font-family: var(--mono); font-size: .6rem; color: var(--ink-dim); margin-top: 1px; }
+.hm-small { opacity: .82; border-style: dashed; } /* n < SMALL_N → muted, still shows $ + n */
+.hm-empty { background:
+    repeating-linear-gradient(45deg, transparent, transparent 5px, var(--line-soft) 5px, var(--line-soft) 6px); }
+.hm-dot { font-family: var(--mono); font-size: 1rem; color: var(--ink-faint); }
+.hm-cap { font-family: var(--mono); font-size: .72rem; line-height: 1.5; color: var(--ink-dim); margin-top: 12px; max-width: 640px; }
+.hm-est { color: var(--amber); font-weight: 700; margin-right: 4px; }
+/* fallback bar list when the grid can't form 2×2 */
+.hm-fallback { display: grid; gap: 10px; }
+.hm-fb-row { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto; align-items: center; gap: 12px; }
+.hm-fb-label { font-family: var(--mono); font-size: .8rem; color: var(--ink-dim); }
+.hm-fb-bar { height: 10px; border-radius: 5px; background: var(--line-soft); overflow: hidden; }
+.hm-fb-bar > i { display: block; height: 100%; }
+.hm-fb-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); }
