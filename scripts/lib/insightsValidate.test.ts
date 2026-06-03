@@ -118,4 +118,63 @@ check("prose with no numbers is ok", () => {
   assert.equal(r.ok, true);
 });
 
+// --- #9 hardening (1): scale-suffix leak. A scaled figure whose MANTISSA collides
+// with a whitelisted aggregate must NOT pass — the validator scales k/K/M/B before
+// matching. fixture() whitelists 5 (time_saved_hours), 40 (alpha cost_per_session),
+// 80 (model_mix %), so each of these would have slipped through pre-fix. ---
+check("scale-suffix $5M is rejected despite mantissa 5 being whitelisted", () => {
+  const r = validateInsightNumbers("Spend hit $5M.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.includes("$5M"), `expected $5M offending, got ${JSON.stringify(r.offending)}`);
+});
+check("scale-suffix $40K is rejected despite mantissa 40 being whitelisted", () => {
+  const r = validateInsightNumbers("Burned $40K this week.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.includes("$40K"), `expected $40K offending, got ${JSON.stringify(r.offending)}`);
+});
+check("scale-suffix 80B is rejected despite mantissa 80 being whitelisted", () => {
+  const r = validateInsightNumbers("Processed 80B tokens.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.includes("80B"), `expected 80B offending, got ${JSON.stringify(r.offending)}`);
+});
+// --- and the SAFE direction: a scaled figure that DOES match an aggregate still passes.
+// fixture cache_read = 9,000,000 → "9M" scales to 9e6 and matches exactly. ---
+check("scaled 9M still validates against the 9,000,000 cache_read aggregate", () => {
+  const r = validateInsightNumbers("Cache read ~9M tokens.", fixture());
+  assert.deepEqual(r.offending, [], `9M should match cache_read 9,000,000`);
+  assert.equal(r.ok, true);
+});
+// --- #9 hardening (1b): leading-dot leak. ".5%" tokenised to "5" pre-fix; 5 is
+// whitelisted so it slipped through. Post-fix it parses to 0.5 (not whitelisted). ---
+check("leading-dot .5% is rejected despite mantissa 5 being whitelisted", () => {
+  const r = validateInsightNumbers("Idle was .5% of the time.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.includes(".5%"), `expected .5% offending, got ${JSON.stringify(r.offending)}`);
+});
+
+// --- #9 hardening (2): non-vacuity guard. The whitelist must draw from DASHBOARD
+// AGGREGATES ONLY, never sessions[]. A number present in a session but in no aggregate
+// must be REJECTED. If a future PR adds s.cost_usd to allowedNumbers(), this reddens. ---
+function fixtureWithSession(): DashboardData {
+  const f = fixture();
+  f.sessions = [
+    {
+      id: "sx", date: "2026-05-15", project: "alpha", cost_usd: 777.77, cost_main: 777.77,
+      cost_sub: 0, active_min: 9, idle_min: 1, cache_pct: 90, subagents: 0, model: "opus",
+      fidelity: "main_loop", top_tools: {}, detail_href: "sessions/sx",
+    },
+  ];
+  return f;
+}
+check("a session-only number ($777.77) is NOT whitelisted (allowedNumbers is aggregate-only)", () => {
+  const f = fixtureWithSession();
+  assert.ok(
+    !allowedNumbers(f).some((n) => Math.round(n) === 778),
+    "777.77 must not appear in the whitelist — it lives only in sessions[]",
+  );
+  const r = validateInsightNumbers("One session alone cost $777.77.", f);
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.includes("$777.77"), `expected $777.77 offending, got ${JSON.stringify(r.offending)}`);
+});
+
 console.log(`\n${passed} insights-validate checks passed`);

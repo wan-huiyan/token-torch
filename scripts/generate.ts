@@ -213,6 +213,36 @@ function verify(
     `✓ data_tier coverage: all ${dashboard.sessions.length} sessions tiered (${enriched} enriched, ${dashboard.sessions.length - enriched} jsonl)`,
   );
 
+  // ---- burn-tier band coverage (issue #6) ----
+  // burnTier() falls back to the absolute {campfire:200, inferno:300} thresholds when no
+  // bands are supplied (old-fixture back-compat). Unit tests pass explicit bands, so a
+  // broken mapDashboard band-wiring would silently collapse every session to the bottom
+  // tier (the issue #3 regression) with all unit tests still green. Assert the generator
+  // emitted real distribution-relative bands. Symmetric to the `observed >= 1` tripwire.
+  const bands = dashboard.meta.burn_bands;
+  if (!bands) throw new Error("meta.burn_bands missing — burn-tier band wiring broken (issue #6)");
+  if (!(bands.campfire <= bands.inferno))
+    throw new Error(`meta.burn_bands not monotonic: campfire ${bands.campfire} > inferno ${bands.inferno}`);
+  // On a non-degenerate corpus (>= 5 sessions, where computeBurnBands derives real
+  // quantiles) the absolute {200,300} fallback means the relative computation silently
+  // failed. A genuinely tiny corpus is allowed to use the fallback, so guard on count.
+  if (dashboard.sessions.length >= 5 && bands.campfire === 200 && bands.inferno === 300)
+    throw new Error(
+      "meta.burn_bands collapsed to the absolute {200,300} fallback on a non-degenerate corpus " +
+        "— distribution-relative band computation broke (issue #6 / regression of #3)",
+    );
+  // a sampled session-detail must mirror the global meta bands (they share one object).
+  if (details.length && details[0].burn_bands) {
+    const d0 = details[0].burn_bands;
+    if (d0.campfire !== bands.campfire || d0.inferno !== bands.inferno)
+      throw new Error(
+        `detail[${details[0].id}].burn_bands {${d0.campfire},${d0.inferno}} != meta.burn_bands {${bands.campfire},${bands.inferno}}`,
+      );
+  }
+  checks.push(
+    `✓ burn_bands present & distribution-relative (campfire $${bands.campfire}, inferno $${bands.inferno})`,
+  );
+
   // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
   // must trace to a dashboard-level aggregate (the honesty gate). Template path
   // (or null) is a no-op pass — templates only emit numbers from the same source.
