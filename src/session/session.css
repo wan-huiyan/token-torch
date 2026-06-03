@@ -1398,9 +1398,6 @@
   gap: 8px;
   line-height: 1.4;
 }
-.tt-session .shipcard li.headline {
-  font-size: 0.9rem;
-}
 .tt-session .shipcard li .tick {
   color: var(--lime);
   flex: none;
@@ -1459,6 +1456,94 @@
   font-size: 0.68rem;
   color: var(--ink-faint);
   margin-top: 10px;
+}
+
+/* Plan 6: PRs as expandable parents — commits + reviews fold inside each row.
+   Override the hero 2-col grid so the expandable rows stack single-column. */
+.tt-session .shipcard.hero ul.prlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tt-session .prrow {
+  display: block;
+}
+.tt-session .prrow.flat {
+  display: flex;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+  padding: 7px 4px;
+}
+.tt-session .prrow details > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 4px;
+  border-radius: 7px;
+  transition: background 0.15s ease;
+}
+.tt-session .prrow details > summary::-webkit-details-marker {
+  display: none;
+}
+.tt-session .prrow details > summary::before {
+  content: "▸";
+  color: var(--cyan);
+  font-size: 0.7rem;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.tt-session .prrow details[open] > summary::before {
+  content: "▾";
+}
+.tt-session .prrow details > summary:hover {
+  background: oklch(0.83 0.145 210 / 0.06);
+}
+.tt-session .prrow details > summary .it {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 0.9rem;
+}
+.tt-session .prrow details > summary .it .title {
+  color: var(--ink);
+}
+.tt-session .prrow .prkids {
+  padding: 6px 0 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-session .prrow .prkids ul.kid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tt-session .prrow .prkids ul.kid li {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  line-height: 1.4;
+}
+.tt-session .prrow .prkids ul.kid.commits li .tick {
+  color: var(--ink-faint);
+  flex: none;
+}
+.tt-session .prrow .prkids ul.kid.reviews li .tick {
+  color: var(--lime);
+  flex: none;
+}
+.tt-session .prrow .prkids ul.kid.reviews li .title {
+  color: var(--ink);
 }
 
 @media (prefers-reduced-motion: reduce) {
