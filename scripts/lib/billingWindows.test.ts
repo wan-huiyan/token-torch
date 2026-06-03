@@ -89,4 +89,24 @@ check("eventsFromRecords flattens timestampsMs with session/project", () => {
   assert.deepEqual(out[2], { ms: 30, sessionId: "b2", project: "proj-b" });
 });
 
+check("single event → one window, active_min 0", () => {
+  const r = deriveBillingWindows([ev(HOUR0)], HOUR0 + 10 * MIN)!;
+  assert.equal(r.window_count, 1);
+  assert.equal(r.current.event_count, 1);
+  assert.equal(r.current.active_min, 0);
+  assert.equal(r.current.start_ms, HOUR0);
+});
+
+check("pace < 100 when an OLDER window is busiest", () => {
+  const e = [
+    ev(HOUR0), ev(HOUR0 + MIN), ev(HOUR0 + 2 * MIN), ev(HOUR0 + 3 * MIN), ev(HOUR0 + 4 * MIN), // older: 4 active-min
+    ev(HOUR0 + 6 * H), ev(HOUR0 + 6 * H + MIN),                                                  // newer: 1 active-min
+  ];
+  const r = deriveBillingWindows(e, HOUR0 + 7 * H)!;
+  assert.equal(r.window_count, 2);
+  assert.equal(r.busiest.start_ms, HOUR0);   // older window is busiest
+  assert.equal(r.current.active_min, 1);     // newer window is current
+  assert.equal(r.pace_vs_busiest_pct, 25);   // round(1/4*100)
+});
+
 console.log(`\n${passed} billingWindows checks passed`);

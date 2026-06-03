@@ -35,16 +35,16 @@ export const dashboardFixture: DashboardData = {
     time_saved_hours: 10.2,
   },
   billing_windows: {
-    generated_at_ms: 1_800_000_000_000 + 30 * 3_600_000, // AFTER the latest window → "none active" (the representative state)
+    generated_at_ms: Date.parse("2026-05-29T16:30:00Z"), // == Date.parse(meta.generated_at); 16:30Z is AFTER W1's 16:00Z end → "none active" (the representative state)
     window_count: 3,
-    total_active_min: 335,
+    total_active_min: 335, // 95 + 180 + 60
     pace_vs_busiest_pct: 53, // round(95 / 180 * 100)
-    current: { start_ms: 1_800_000_000_000 + 18 * 3_600_000, end_ms: 1_800_000_000_000 + 23 * 3_600_000, active_min: 95, event_count: 240, session_count: 2, project_count: 1, is_active: false },
-    busiest: { start_ms: 1_800_000_000_000 + 6 * 3_600_000, end_ms: 1_800_000_000_000 + 11 * 3_600_000, active_min: 180, event_count: 410, session_count: 3, project_count: 2, is_active: false },
+    current: { start_ms: Date.parse("2026-05-29T11:00:00Z"), end_ms: Date.parse("2026-05-29T16:00:00Z"), active_min: 95, event_count: 240, session_count: 2, project_count: 1, is_active: false },
+    busiest: { start_ms: Date.parse("2026-05-29T05:00:00Z"), end_ms: Date.parse("2026-05-29T10:00:00Z"), active_min: 180, event_count: 410, session_count: 3, project_count: 2, is_active: false },
     recent: [
-      { start_ms: 1_800_000_000_000 + 18 * 3_600_000, end_ms: 1_800_000_000_000 + 23 * 3_600_000, active_min: 95, event_count: 240, session_count: 2, project_count: 1, is_active: false },
-      { start_ms: 1_800_000_000_000 + 6 * 3_600_000, end_ms: 1_800_000_000_000 + 11 * 3_600_000, active_min: 180, event_count: 410, session_count: 3, project_count: 2, is_active: false },
-      { start_ms: 1_800_000_000_000, end_ms: 1_800_000_000_000 + 5 * 3_600_000, active_min: 60, event_count: 150, session_count: 1, project_count: 1, is_active: false },
+      { start_ms: Date.parse("2026-05-29T11:00:00Z"), end_ms: Date.parse("2026-05-29T16:00:00Z"), active_min: 95, event_count: 240, session_count: 2, project_count: 1, is_active: false },
+      { start_ms: Date.parse("2026-05-29T05:00:00Z"), end_ms: Date.parse("2026-05-29T10:00:00Z"), active_min: 180, event_count: 410, session_count: 3, project_count: 2, is_active: false },
+      { start_ms: Date.parse("2026-05-28T22:00:00Z"), end_ms: Date.parse("2026-05-29T03:00:00Z"), active_min: 60, event_count: 150, session_count: 1, project_count: 1, is_active: false },
     ],
     note: "Sample data — estimate; reconstructed 5-hour windows from local timestamps. Lower bound, not a quota; shows activity, not % of a limit.",
   },

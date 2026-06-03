@@ -9,8 +9,8 @@ import { Section } from "./Section";
  * lower bound; as of the last generate. Hidden when absent. Complements the hero's "on a plan, so $ is FYI".
  * Degrades to "none active" when the latest window isn't current (the usual case on historical data).
  */
-const clock = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const day = (ms: number): string => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
+const clock = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+const day = (ms: number): string => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
 const barPct = (active: number, busiest: number): number => (busiest > 0 ? Math.max(4, Math.round((active / busiest) * 100)) : 4);
 
 export function BillingWindows({ data }: { data: DashboardData }) {
@@ -50,15 +50,15 @@ export function BillingWindows({ data }: { data: DashboardData }) {
       <div className="bw-bar" aria-hidden>
         <i style={{ width: `${pace}%`, background: "var(--amber)" }} />
       </div>
-      <div className="bw-recent" aria-hidden>
+      <div className="bw-recent">
         {bw.recent.map((w) => (
           <div className="bw-win" key={w.start_ms} title={`${day(w.start_ms)} ${clock(w.start_ms)}–${clock(w.end_ms)} · ${mins(w.active_min)} active · ${w.session_count} sessions · ${w.event_count} events`}>
-            <div className="bw-win-bar"><i style={{ height: `${barPct(w.active_min, bw.busiest.active_min)}%` }} /></div>
+            <div className="bw-win-bar" aria-hidden><i style={{ height: `${barPct(w.active_min, bw.busiest.active_min)}%` }} /></div>
             <div className="bw-win-lab">{mins(w.active_min)}</div>
           </div>
         ))}
       </div>
-      <p className="bw-note">Shows activity, not % of any limit — your plan's window is shared across claude.ai, Desktop &amp; every device, so this is a lower bound. {bw.note}</p>
+      <p className="bw-note">{bw.note}</p>
     </Section>
   );
 }
