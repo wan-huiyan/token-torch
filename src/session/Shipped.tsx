@@ -58,10 +58,10 @@ function Scoreboard({ data }: { data: SessionDetailData }) {
   );
 }
 
-function ItemRow({ it, showCost, headline }: { it: ShippedItem; showCost?: boolean; headline?: boolean }) {
+function ItemRow({ it, showCost }: { it: ShippedItem; showCost?: boolean }) {
   const tone = metaTone(it.meta);
   return (
-    <li className={headline ? "headline" : undefined}>
+    <li>
       <span className="tick">▸</span>
       <div className="ib">
         <div className="it">
@@ -129,14 +129,12 @@ function Card({
   items,
   variant,
   showCost,
-  headline,
   collapseAfter,
 }: {
   title: string;
   items?: ShippedItem[];
   variant?: string;
   showCost?: boolean;
-  headline?: boolean;
   collapseAfter?: number;
 }) {
   if (!items || !items.length) return null;
@@ -150,7 +148,7 @@ function Card({
       </h4>
       <ul>
         {visible.map((it, i) => (
-          <ItemRow key={i} it={it} showCost={showCost} headline={headline} />
+          <ItemRow key={i} it={it} showCost={showCost} />
         ))}
       </ul>
       {hidden > 0 ? <div className="more">+{hidden} more</div> : null}

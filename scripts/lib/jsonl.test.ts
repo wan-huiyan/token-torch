@@ -70,4 +70,41 @@ check("extractShipped nests commits + a review under their PR, keeps direct comm
   assert.equal(scoreboardReviews, 1, "scoreboard review count includes nested reviews");
 });
 
+check("extractShipped: heredoc-wrapped commit appears ONCE with the clean subject (no garbled $(cat prefix, no duplicate)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ship-heredoc-"));
+  const sid = "aabb1122";
+  const rec = (ts: string, content: any[]) =>
+    JSON.stringify({ timestamp: ts, message: { content } });
+  const bash = (cmd: string) => ({ type: "tool_use", name: "Bash", input: { command: cmd } });
+  const result = (txt: string) => ({ type: "tool_result", content: txt });
+  // This is the actual command shape used in these sessions:
+  //   git commit -m "$(cat <<'EOF'
+  //   fix(actions): correct stale hero copy — Ten->Nine
+  //   body line
+  //   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+  //   EOF
+  //   )"
+  const heredocCmd = `git commit -m "$(cat <<'EOF'\nfix(actions): correct stale hero copy — Ten->Nine\nbody line\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>\nEOF\n)"`;
+  const lines = [
+    rec("2026-06-03T11:00:00Z", [bash(`git commit -m "feat: before-pr"`)]),
+    rec("2026-06-03T11:01:00Z", [bash(`gh pr create --title "Plan 6 fixes"`)]),
+    rec("2026-06-03T11:01:05Z", [result("https://github.com/wan-huiyan/token-torch/pull/864")]),
+    rec("2026-06-03T11:02:00Z", [bash(heredocCmd)]),
+    rec("2026-06-03T11:03:00Z", [bash(`gh pr merge 864 --squash`)]),
+  ];
+  writeFileSync(join(dir, sid + ".jsonl"), lines.join("\n"));
+  const index = new Map<string, string[]>([[sid, [join(dir, sid)]]]);
+
+  const sh = extractShipped(sid, index)!;
+  const pr864 = sh.prs?.find((p) => p.ref === "#864");
+  assert.ok(pr864, "PR #864 must exist");
+  const commits = pr864!.commits ?? [];
+  const titles = commits.map((c) => c.title);
+  // must be exactly 2 clean subjects — no $(cat prefix, no duplicate
+  assert.equal(commits.length, 2, `Expected 2 commits but got ${commits.length}: ${JSON.stringify(titles)}`);
+  assert.equal(titles[0], "feat: before-pr");
+  assert.equal(titles[1], "fix(actions): correct stale hero copy — Ten->Nine");
+  assert.ok(!titles.some((t) => t.startsWith("$(cat")), "no commit title may start with $(cat");
+});
+
 console.log(`\n${passed} jsonl checks passed`);

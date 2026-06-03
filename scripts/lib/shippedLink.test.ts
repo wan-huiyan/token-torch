@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { linkCommitsToPrs, type ShipEvent } from "./shippedLink";
+import { linkCommitsToPrs, cleanCommitSubject, type ShipEvent } from "./shippedLink";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
@@ -75,6 +75,20 @@ check("a numberless merge (gh pr merge --auto) still closes the active PR → la
   const r = linkCommitsToPrs(ev);
   assert.deepEqual(r.prCommits.get("15"), ["in15"]);
   assert.deepEqual(r.unlinkedCommits, ["after"]);
+});
+
+check("cleanCommitSubject: heredoc-wrapped blob → first meaningful subject line", () => {
+  const raw = "$(cat <<'EOF'\nfix(actions): correct stale hero copy — Ten->Nine\nbody\nCo-Authored-By: X <x@y>\nEOF\n)";
+  assert.equal(cleanCommitSubject(raw), "fix(actions): correct stale hero copy — Ten->Nine");
+});
+
+check("cleanCommitSubject: already-clean subject passes through unchanged", () => {
+  const raw = "fix(actions): correct stale hero copy — Ten->Nine";
+  assert.equal(cleanCommitSubject(raw), raw);
+});
+
+check("cleanCommitSubject: simple plain subject passes through unchanged", () => {
+  assert.equal(cleanCommitSubject("feat: simple subject"), "feat: simple subject");
 });
 
 console.log(`${passed} shippedLink checks passed`);

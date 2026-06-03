@@ -28,7 +28,7 @@ import { join, basename } from "node:path";
 import { OPUS_RATES, priceUsd, round2, type Rates, type TokenSet } from "./pricing";
 import { extractUsageTokens } from "./ingest";
 import type { Shipped, ShippedItem } from "../../src/types";
-import { linkCommitsToPrs, type ShipEvent } from "./shippedLink";
+import { linkCommitsToPrs, cleanCommitSubject, type ShipEvent } from "./shippedLink";
 
 export interface SubagentDispatch {
   id: string; // short agent id (matches Schema C's per-dispatch keys)
@@ -429,8 +429,8 @@ export function extractShipped(
             // a numberless `gh pr merge` (current branch, e.g. `--auto`) still closes the active PR
             if (!numbered) events.push({ kind: "pr_merge" });
           }
-          for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) events.push({ kind: "commit", subject: mm[1] ?? mm[2] });
-          for (const mm of cmd.matchAll(COMMIT_HEREDOC_RE)) events.push({ kind: "commit", subject: mm[1].trim() });
+          for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) events.push({ kind: "commit", subject: cleanCommitSubject(mm[1] ?? mm[2]) });
+          for (const mm of cmd.matchAll(COMMIT_HEREDOC_RE)) events.push({ kind: "commit", subject: cleanCommitSubject(mm[1]) });
         } else if (name === "Write" || name === "Edit" || name === "NotebookEdit") {
           const fp: string = input.file_path ?? input.notebook_path ?? "";
           if (fp) filesTouched.add(fp);
@@ -516,7 +516,7 @@ export function extractShipped(
         title: e.title ?? `Pull request #${num}`,
         ref: `#${num}`,
         meta: e.merged ? "merged" : "opened", // STATUS ONLY — never a cost (honesty: no per-PR $)
-        ...(nestedCommits.length ? { commits: nestedCommits.slice(0, 20) } : {}),
+        ...(nestedCommits.length ? { commits: nestedCommits } : {}),
         ...(nestedReviews.length ? { reviews: nestedReviews } : {}),
       };
     });

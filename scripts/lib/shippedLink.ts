@@ -7,6 +7,43 @@
  * separately — honestly grouped, never mis-attributed. No I/O; fully testable.
  * ========================================================================== */
 
+/**
+ * Unwraps a heredoc / command-substitution wrapper from a commit subject.
+ *
+ * These sessions commit via:
+ *   git commit -m "$(cat <<'EOF'\n<subject>\n<body>\nCo-Authored-By: …\nEOF\n)"
+ *
+ * That one command is matched by BOTH regexes:
+ *   COMMIT_INLINE_RE  → captures the whole garbled blob `$(cat <<'EOF'\n<subject>\n…`
+ *   COMMIT_HEREDOC_RE → captures the clean `<subject>`
+ *
+ * By cleaning both at the push site, both forms normalize to the same string,
+ * and the downstream uniqBy(…, c => c.title) collapses them to ONE entry.
+ */
+export function cleanCommitSubject(raw: string): string {
+  const lines = raw.split("\n");
+  const skipLine = (l: string): boolean => {
+    const t = l.trim();
+    if (!t) return true;
+    // heredoc opener embedded in inline capture: $(cat <<'EOF', $(cat <<"EOF", etc.
+    if (/^\$\(cat\s+<</.test(t)) return true;
+    // bare heredoc marker line: <<'EOF', <<"EOF", <<EOF, <<-EOF
+    if (/^<<-?\s*['"]?\w+['"]?\s*$/.test(t)) return true;
+    // heredoc/command-substitution closer lines: EOF, ), )", "
+    if (/^(EOF|\)|[)"]{1,2})$/.test(t)) return true;
+    // Co-Authored-By trailers
+    if (/^Co-Authored-By:/i.test(t)) return true;
+    return false;
+  };
+  for (const line of lines) {
+    if (skipLine(line)) continue;
+    // strip a leading inline $(cat <<'EOF' token that may still be on the first meaningful line
+    const cleaned = line.trim().replace(/^\$\(cat\s+<<-?\s*['"]?\w+['"]?\s+/, "").trim();
+    if (cleaned) return cleaned;
+  }
+  return raw.trim();
+}
+
 export type ShipEvent =
   | { kind: "pr_open"; num: string; title: string }
   | { kind: "pr_merge"; num?: string } // num omitted = a numberless `gh pr merge` (current branch) → clears the active PR
