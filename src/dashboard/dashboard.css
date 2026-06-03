@@ -422,6 +422,20 @@
 .co-bar > i { display: block; height: 100%; }
 .co-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
 
+/* B4 — 5-hour rolling-window panel */
+.bw-grid { display: flex; gap: 28px; flex-wrap: wrap; }
+.bw-stat { min-width: 170px; }
+.bw-big { font-size: 1.8rem; font-weight: 700; color: var(--amber); line-height: 1.1; }
+.bw-cap { font-size: .78rem; color: var(--ink-dim); margin-top: 2px; }
+.bw-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
+.bw-bar > i { display: block; height: 100%; }
+.bw-recent { display: flex; gap: 6px; align-items: flex-end; margin: 12px 0 4px; }
+.bw-win { flex: 1; min-width: 12px; display: flex; flex-direction: column; align-items: center; }
+.bw-win-bar { width: 100%; height: 44px; display: flex; align-items: flex-end; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+.bw-win-bar > i { width: 100%; display: block; background: var(--amber); }
+.bw-win-lab { font-size: .6rem; color: var(--ink-faint); margin-top: 3px; }
+.bw-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
+
 /* ---- confound banner (Plan 5 T4) — prominent validity warning, amber register ---- */
 .confound { margin: 18px 0; padding: 14px 16px; border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);

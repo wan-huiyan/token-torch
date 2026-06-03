@@ -328,6 +328,32 @@ function verify(
     checks.push(`✓ insights are template/none — no-fabrication check is a no-op`);
   }
 
+  // B4 — billing-window bounds + presence (estimate; spec §8).
+  {
+    const bw = dashboard.billing_windows;
+    if (dashboard.sessions.length > 0 && !bw)
+      throw new Error("billing_windows absent despite non-empty sessions[] (wiring miss)");
+    if (bw) {
+      const HOUR = 3_600_000, WIN = 18_000_000;
+      for (const w of [...bw.recent, bw.busiest, bw.current]) {
+        if (w.start_ms % HOUR !== 0) throw new Error(`billing window start ${w.start_ms} not UTC-hour aligned`);
+        if (w.end_ms - w.start_ms !== WIN) throw new Error(`billing window span ${w.end_ms - w.start_ms} != 5h`);
+        if (w.active_min < 0 || w.active_min > 300.01) throw new Error(`billing window active_min ${w.active_min} out of [0,300]`);
+        if (w.event_count < 1 || w.session_count < 1 || w.project_count < 1) throw new Error("billing window has empty counts");
+      }
+      const asc = [...bw.recent].reverse(); // recent is most-recent-first → ascending for non-overlap check
+      for (let i = 1; i < asc.length; i++)
+        if (asc[i].start_ms < asc[i - 1].end_ms) throw new Error(`billing windows overlap at ${asc[i].start_ms}`);
+      if (bw.pace_vs_busiest_pct < 0 || bw.pace_vs_busiest_pct > 100) throw new Error(`pace_vs_busiest_pct ${bw.pace_vs_busiest_pct} out of [0,100]`);
+      if (bw.generated_at_ms !== Date.parse(dashboard.meta.generated_at)) throw new Error("billing_windows.generated_at_ms != meta.generated_at");
+      if (bw.current.is_active && !(bw.generated_at_ms < bw.current.end_ms)) throw new Error("current.is_active but generated_at >= window end");
+      checks.push(
+        `✓ billing_windows: ${bw.window_count} windows, ${bw.total_active_min} active-min total, ` +
+          `current ${bw.current.is_active ? "ACTIVE" : "idle"}, pace ${bw.pace_vs_busiest_pct}% of busiest`,
+      );
+    }
+  }
+
   return checks;
 }
 

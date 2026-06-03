@@ -24,6 +24,7 @@ import { TimelineChart } from "./TimelineChart";
 import { SessionTable } from "./SessionTable";
 import { Distributions } from "./Distributions";
 import { ContextOverhead } from "./ContextOverhead";
+import { BillingWindows } from "./BillingWindows";
 import { Recommendations } from "./Recommendations";
 import { Footer } from "./Footer";
 
@@ -63,6 +64,7 @@ export function DashboardPage({
         {/* cost/distribution panels demoted to supporting cast (decision #2) */}
         <Distributions data={data} />
         <ContextOverhead data={data} />
+        <BillingWindows data={data} />
         <Recommendations data={data} />
         <Footer meta={data.meta} />
       </main>
