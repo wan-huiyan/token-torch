@@ -28,6 +28,7 @@ import { join, basename } from "node:path";
 import { OPUS_RATES, priceUsd, round2, type Rates, type TokenSet } from "./pricing";
 import { extractUsageTokens } from "./ingest";
 import type { Shipped, ShippedItem } from "../../src/types";
+import { linkCommitsToPrs, type ShipEvent } from "./shippedLink";
 
 export interface SubagentDispatch {
   id: string; // short agent id (matches Schema C's per-dispatch keys)
@@ -383,68 +384,86 @@ export function extractShipped(
   const dirs = index.get(id8.toLowerCase()) ?? [];
   if (!dirs.length) return undefined;
 
+  // (1) gather every main record across all worktree-fanout dirs, in true
+  //     chronological order — so a PR's `gh pr create` never precedes its own
+  //     pre-commits (claude-code-projects-jsonl-worktree-fanout).
+  const stamped: { ts: number; record: any }[] = [];
+  for (const sessionDir of dirs)
+    for (const r of mainRecords(sessionDir + ".jsonl")) {
+      const ts = Date.parse(r?.timestamp ?? "");
+      stamped.push({ ts: Number.isNaN(ts) ? 0 : ts, record: r });
+    }
+  stamped.sort((a, b) => a.ts - b.ts);
+
+  // (2) single pass → events + pr metadata + skills/adrs/files.
   const prByNum = new Map<string, { title?: string; merged: boolean; opened: boolean }>();
+  const events: ShipEvent[] = [];
   const skills: ShippedItem[] = [];
   const adrs: ShippedItem[] = [];
-  const commitSubjects: string[] = [];
   const filesTouched = new Set<string>();
   let pendingCreateTitle: string | null = null;
 
-  for (const sessionDir of dirs) {
-    for (const r of mainRecords(sessionDir + ".jsonl")) {
-      const content = r?.message?.content;
-      if (!Array.isArray(content)) continue;
-      for (const b of content) {
-        if (!b || typeof b !== "object") continue;
-        if (b.type === "tool_use") {
-          const name = b.name;
-          const input = b.input ?? {};
-          if (name === "Bash") {
-            const cmd: string = input.command ?? "";
-            if (/gh pr create/.test(cmd)) {
-              const m = TITLE_RE.exec(cmd);
-              pendingCreateTitle = m ? (m[1] ?? m[2]) : "(untitled PR)";
-            }
+  for (const { record: r } of stamped) {
+    const content = r?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (!b || typeof b !== "object") continue;
+      if (b.type === "tool_use") {
+        const name = b.name;
+        const input = b.input ?? {};
+        if (name === "Bash") {
+          const cmd: string = input.command ?? "";
+          if (/gh pr create/.test(cmd)) {
+            const m = TITLE_RE.exec(cmd);
+            pendingCreateTitle = m ? (m[1] ?? m[2]) : "(untitled PR)";
+          }
+          if (/\bgh pr merge\b/.test(cmd)) {
+            let numbered = false;
             for (const mm of cmd.matchAll(MERGE_RE)) {
+              numbered = true;
               const e = prByNum.get(mm[1]) ?? { merged: false, opened: false };
               e.merged = true;
               prByNum.set(mm[1], e);
+              events.push({ kind: "pr_merge", num: mm[1] });
             }
-            for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) commitSubjects.push(mm[1] ?? mm[2]);
-            for (const mm of cmd.matchAll(COMMIT_HEREDOC_RE)) commitSubjects.push(mm[1].trim());
-          } else if (name === "Write" || name === "Edit" || name === "NotebookEdit") {
-            const fp: string = input.file_path ?? input.notebook_path ?? "";
-            if (fp) filesTouched.add(fp);
-            if (name === "Write") {
-              const sm = SKILL_RE.exec(fp);
-              if (sm) skills.push({ title: sm[1], meta: "authored" });
-              else if (ADR_RE.test(fp)) adrs.push({ title: basename(fp), meta: "decision record" });
-            }
+            // a numberless `gh pr merge` (current branch, e.g. `--auto`) still closes the active PR
+            if (!numbered) events.push({ kind: "pr_merge" });
           }
-        } else if (b.type === "tool_result") {
-          // a /pull/N URL right after a `gh pr create` → that newly-opened PR.
-          const cont = b.content;
-          const txt =
-            typeof cont === "string"
-              ? cont
-              : Array.isArray(cont)
-                ? cont.map((x: any) => (x?.type === "text" ? x.text : "")).join("\n")
-                : "";
-          for (const mm of txt.matchAll(PULL_RE)) {
-            if (pendingCreateTitle != null) {
-              const e = prByNum.get(mm[1]) ?? { merged: false, opened: false };
-              e.opened = true;
-              if (!e.title) e.title = pendingCreateTitle;
-              prByNum.set(mm[1], e);
-              pendingCreateTitle = null;
-            }
+          for (const mm of cmd.matchAll(COMMIT_INLINE_RE)) events.push({ kind: "commit", subject: mm[1] ?? mm[2] });
+          for (const mm of cmd.matchAll(COMMIT_HEREDOC_RE)) events.push({ kind: "commit", subject: mm[1].trim() });
+        } else if (name === "Write" || name === "Edit" || name === "NotebookEdit") {
+          const fp: string = input.file_path ?? input.notebook_path ?? "";
+          if (fp) filesTouched.add(fp);
+          if (name === "Write") {
+            const sm = SKILL_RE.exec(fp);
+            if (sm) skills.push({ title: sm[1], meta: "authored" });
+            else if (ADR_RE.test(fp)) adrs.push({ title: basename(fp), meta: "decision record" });
+          }
+        }
+      } else if (b.type === "tool_result") {
+        // a /pull/N URL right after a `gh pr create` → that newly-opened PR.
+        const cont = b.content;
+        const txt =
+          typeof cont === "string"
+            ? cont
+            : Array.isArray(cont)
+              ? cont.map((x: any) => (x?.type === "text" ? x.text : "")).join("\n")
+              : "";
+        for (const mm of txt.matchAll(PULL_RE)) {
+          if (pendingCreateTitle != null) {
+            const e = prByNum.get(mm[1]) ?? { merged: false, opened: false };
+            e.opened = true;
+            if (!e.title) e.title = pendingCreateTitle;
+            prByNum.set(mm[1], e);
+            events.push({ kind: "pr_open", num: mm[1], title: pendingCreateTitle });
+            pendingCreateTitle = null;
           }
         }
       }
     }
   }
 
-  // reviews ← subagent meta descriptions mentioning "review", enriched with the
+  // (3) reviews ← subagent meta descriptions mentioning "review", enriched with the
   // backing dispatch's REAL cost + duration (each review IS a subagent run).
   const costFor = (desc: string): string | undefined => {
     const t = timings.find(
@@ -454,7 +473,7 @@ export function extractShipped(
     const span = t.span_min >= 1 ? `${Math.round(t.span_min)}m` : `${Math.round(t.span_min * 60)}s`;
     return `$${t.usd.toFixed(2)} · ${span}`;
   };
-  const reviews: ShippedItem[] = [];
+  const allReviews: ShippedItem[] = [];
   for (const sessionDir of dirs) {
     const metas: string[] = [];
     collectMetaFiles(join(sessionDir, "subagents"), metas);
@@ -465,33 +484,51 @@ export function extractShipped(
         if (/\breview\b/i.test(desc)) {
           const pr = /(?:PR\s*)?(\d{2,5})/.exec(desc);
           const meta = costFor(desc);
-          reviews.push({ title: desc.slice(0, 80), ...(pr ? { ref: `#${pr[1]}` } : {}), ...(meta ? { meta } : {}) });
+          allReviews.push({ title: desc.slice(0, 80), ...(pr ? { ref: `#${pr[1]}` } : {}), ...(meta ? { meta } : {}) });
         }
       } catch {
         /* skip */
       }
     }
   }
+  const reviewsDeduped = uniqBy(allReviews, (r) => r.title);
+
+  // (4) commit linkage + nesting.
+  const { prCommits, unlinkedCommits } = linkCommitsToPrs(events);
+  const reviewsByRef = new Map<string, ShippedItem[]>();
+  const unlinkedReviews: ShippedItem[] = [];
+  for (const rv of reviewsDeduped) {
+    if (rv.ref && prByNum.has(rv.ref.replace(/^#/, ""))) {
+      const k = rv.ref.replace(/^#/, "");
+      if (!reviewsByRef.has(k)) reviewsByRef.set(k, []);
+      reviewsByRef.get(k)!.push(rv);
+    } else unlinkedReviews.push(rv);
+  }
+
+  const commitItem = (s: string): ShippedItem => ({ title: s.length > 80 ? s.slice(0, 78) + "…" : s });
 
   const prs: ShippedItem[] = [...prByNum.entries()]
     .sort((a, b) => Number(b[0]) - Number(a[0]))
-    .map(([num, e]) => ({
-      title: e.title ?? `Pull request #${num}`,
-      ref: `#${num}`,
-      meta: e.merged ? "merged" : "opened",
-    }));
+    .map(([num, e]) => {
+      const nestedCommits = uniqBy((prCommits.get(num) ?? []).map(commitItem), (c) => c.title);
+      const nestedReviews = reviewsByRef.get(num) ?? [];
+      return {
+        title: e.title ?? `Pull request #${num}`,
+        ref: `#${num}`,
+        meta: e.merged ? "merged" : "opened", // STATUS ONLY — never a cost (honesty: no per-PR $)
+        ...(nestedCommits.length ? { commits: nestedCommits.slice(0, 20) } : {}),
+        ...(nestedReviews.length ? { reviews: nestedReviews } : {}),
+      };
+    });
 
-  const commits: ShippedItem[] = uniqBy(
-    commitSubjects.map((s) => ({ title: s.length > 80 ? s.slice(0, 78) + "…" : s })),
-    (c) => c.title,
-  );
+  const directCommits = uniqBy(unlinkedCommits.map(commitItem), (c) => c.title);
 
   const shipped: Shipped = {};
   if (prs.length) shipped.prs = prs.slice(0, 12);
-  if (reviews.length) shipped.reviews = uniqBy(reviews, (r) => r.title).slice(0, 12);
+  if (unlinkedReviews.length) shipped.reviews = unlinkedReviews.slice(0, 12);
   if (adrs.length) shipped.adrs = uniqBy(adrs, (a) => a.title);
   if (skills.length) shipped.skills = uniqBy(skills, (s) => s.title);
-  if (commits.length) shipped.commits = commits.slice(0, 10);
+  if (directCommits.length) shipped.commits = directCommits.slice(0, 10);
   if (filesTouched.size) shipped.files_touched = filesTouched.size;
   return Object.keys(shipped).length ? shipped : undefined;
 }
