@@ -28,6 +28,11 @@ const REL_TOL = 0.01;
 /** Year tokens (4-digit 19xx/20xx) come from dates, not metrics — never fabrication. */
 const YEAR_RE = /^(?:19|20)\d{2}$/;
 
+/** Scale multipliers for a trailing k/K/M/B/m/b suffix ("$5M" => 5_000_000). We scale
+ *  the mantissa BEFORE matching so a fabricated "$5M" cannot slip through merely because
+ *  the bare "5" coincides with a whitelisted aggregate (issue #9). */
+const SCALE: Record<string, number> = { k: 1e3, m: 1e6, b: 1e9 };
+
 /** The whitelist of numbers the LLM may cite. Dashboard-level aggregates ONLY. */
 export function allowedNumbers(data: DashboardData): number[] {
   const t = data.totals;
@@ -83,14 +88,19 @@ function matchesAllowed(value: number, allowed: number[]): boolean {
 export function validateInsightNumbers(prose: string, data: DashboardData): ValidationResult {
   const allowed = allowedNumbers(data);
   const offending: string[] = [];
-  // matches: $1,234.56 | 1,234 | 95.0% | 42 — captures the numeric core (with commas/decimals).
-  const tokenRe = /\$?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s?%?/g;
+  // matches: $1,234.56 | 1,234 | 95.0% | .5% | $5M | 80B — captures the numeric core
+  // (with commas/decimals/leading-dot) plus an optional k/K/M/B scale suffix (group 2).
+  const tokenRe = /\$?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)([kKmMbB])?\s?%?/g;
   for (const m of prose.matchAll(tokenRe)) {
     const raw = m[1];
     // A bare 4-digit year (date label) is not a metric claim.
     if (YEAR_RE.test(raw.replace(/[,.].*$/, ""))) continue;
-    const value = parseFloat(raw.replace(/,/g, ""));
+    let value = parseFloat(raw.replace(/,/g, ""));
     if (Number.isNaN(value)) continue;
+    // Scale a trailing k/M/B suffix into the value before whitelist-matching, so a
+    // fabricated scaled figure can't pass on a coincidental mantissa collision (#9).
+    const suffix = m[2];
+    if (suffix) value *= SCALE[suffix.toLowerCase()];
     if (!matchesAllowed(value, allowed)) offending.push(m[0].trim());
   }
   return { ok: offending.length === 0, offending };
