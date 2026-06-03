@@ -460,3 +460,29 @@
 .hm-fb-bar { height: 10px; border-radius: 5px; background: var(--line-soft); overflow: hidden; }
 .hm-fb-bar > i { display: block; height: 100%; }
 .hm-fb-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); }
+
+/* ---- breakdown page (Plan 5 T6) ---- */
+.bd-back { display: inline-block; margin: 6px 0 4px; background: none; border: none; cursor: pointer;
+  color: var(--cyan); padding: 0; }
+.bd-excluded { font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); margin: 6px 0 2px; }
+.dist-link { display: inline-block; margin-top: 8px; font-family: var(--mono); font-size: .74rem;
+  color: var(--cyan); text-decoration: none; }
+.dist-link:hover { text-decoration: underline; }
+.bd-cards { display: grid; gap: 14px; }
+.bd-card { padding: 14px 16px; border: 1px solid var(--line-soft); border-radius: 12px;
+  background: var(--panel, rgba(255,255,255,.03)); }
+.bd-illus { border-style: dashed; }
+.bd-card-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.bd-card-label { font-weight: 700; font-size: 1rem; }
+.bd-card-meta { font-family: var(--mono); font-size: .74rem; color: var(--ink-dim); }
+.bd-illus-tag { font-family: var(--mono); font-size: .68rem; color: var(--amber); }
+.bd-context { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 12px;
+  font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); }
+.bd-context b { color: var(--ink-dim); font-weight: 700; }
+.bd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 18px; }
+.bd-metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bd-metric-label { font-family: var(--mono); font-size: .7rem; letter-spacing: .03em; color: var(--ink-faint); }
+.bd-metric-val { font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--ink); }
+.bd-est { color: var(--amber); font-size: .62rem; font-weight: 700; }
+.bd-metric-bar { height: 7px; border-radius: 5px; background: var(--line-soft); overflow: hidden; margin-top: 5px; }
+.bd-metric-bar > i { display: block; height: 100%; }
