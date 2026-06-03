@@ -85,9 +85,22 @@ export const sessionDemo: SessionDetailData = {
     subagents_per_dispatch: [],
   },
   shipped: {
-    prs: [{ title: "feat: nightly batch runner + schedule", ref: "#88", meta: "+612 / -94" }],
+    prs: [
+      {
+        title: "feat: nightly batch runner + schedule",
+        ref: "#88",
+        meta: "merged",
+        commits: [
+          { title: "feat: scaffold nightly batch runner" },
+          { title: "feat: wire cron schedule + retry backoff" },
+          { title: "fix: review nit — clamp concurrency to pool size" },
+        ],
+        reviews: [{ title: "Reviewed batch runner concurrency + retry", ref: "#88", meta: "$2.06 · 3m" }],
+      },
+    ],
     reviews: [{ title: "Reviewed template schema", ref: "#86" }],
     adrs: [{ title: "ADR-003 — batch generation over streaming" }],
     skills: [{ title: "demo-template" }],
+    commits: [{ title: "docs: tidy README batch-runner section (direct to main)" }],
   },
 };
