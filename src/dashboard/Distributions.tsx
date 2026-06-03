@@ -93,6 +93,9 @@ export function Distributions({ data }: { data: DashboardData }) {
               ))}
             </div>
             <div className="tl-cap">{modelCap}</div>
+            <a className="dist-link" href="#/breakdown">
+              see the breakdown →
+            </a>
           </div>
 
           <div className="panel">

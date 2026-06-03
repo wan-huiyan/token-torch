@@ -16,6 +16,7 @@ import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDi
 import { computeBurnBands } from "../../src/shared/burnTier";
 import { loadPlanConfig } from "./plan";
 import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
+import { isRealModelId } from "../../src/shared/models";
 
 const SMALL_N_THRESHOLD = 10;
 
@@ -182,6 +183,8 @@ export function mapDashboard(
       effort,
       data_tier,
       context_overhead,
+      out_tokens: detail.tokens.output,
+      time_saved_min: fb.available ? fb.timeSavedMin : 0,
       top_tools: topTools(rec.toolCounts),
       detail_href: `/sessions/${detail.id}`,
     });
@@ -257,7 +260,11 @@ export function mapDashboard(
   const modelCounts: Record<string, number> = {};
   const toolsAgg: Record<string, number> = {};
   for (const rec of records) {
-    for (const [m, n] of Object.entries(rec.modelMsgCounts)) modelCounts[m.toLowerCase()] = (modelCounts[m.toLowerCase()] ?? 0) + n;
+    for (const [m, n] of Object.entries(rec.modelMsgCounts)) {
+      const id = m.toLowerCase();
+      if (!isRealModelId(id)) continue; // drop <synthetic>/unknown before the mix; denominator below renormalizes (Plan 5, closes #4 leak)
+      modelCounts[id] = (modelCounts[id] ?? 0) + n;
+    }
     for (const [t, n] of Object.entries(rec.toolCounts)) toolsAgg[t] = (toolsAgg[t] ?? 0) + n;
   }
   const modelTotal = Object.values(modelCounts).reduce((a, b) => a + b, 0) || 1;
