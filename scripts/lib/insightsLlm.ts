@@ -26,7 +26,7 @@ const MAX_RETRIES = 2;
 /** BUMP on any prompt / rule / model-mix-format change. The insights cache key
  *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
  *  this a prompt edit would serve STALE cached insights until the aggregates change. */
-export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice";
+export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice-2";
 
 /** "claude-opus-4-8" → "Opus 4.8" so the prompt feeds readable, version-distinct
  *  labels (the model was collapsing two Opus VERSIONS into an ambiguous
@@ -54,7 +54,7 @@ function buildContextBlock(data: DashboardData): string {
     .join("\n");
   return [
     "You are writing a short, PLAYFUL weekly insights note over a developer's Claude Code usage data — in the voice of its retro ARCADE dashboard (the UI has pixel flames for burned spend, rising coins, a sleepy moon for idle time, a ⚡ bolt for time saved).",
-    "VOICE: arcade / retro-game energy — a tasteful emoji accent or two (🔥 🪙 🌙 🎮 ⚡), light wordplay ('burned' for spend, 'sidekicks' for subagents, 'soaked up' / 'snoozing'), upbeat but never cutesy or hypey. This voice NEVER overrides the HARD RULES below: stay honest — cite only the listed numbers, describe SHARES not winners, and no superlatives. Playful framing, real figures.",
+    "VOICE: arcade / retro-game energy — a tasteful emoji accent or two (🔥 🪙 🌙 🎮 ⚡), light wordplay ('burned' for spend, 'sidekicks' for subagents, 'soaked up' / 'snoozing'), upbeat but never cutesy or hypey. This voice NEVER overrides the HARD RULES below: stay honest — cite only the listed numbers, describe SHARES not winners, and no superlatives. The wordplay is LEXICAL, not numeric: invent NO figures — no game 'scores', 'levels', '1-ups', or counts that aren't in the citable list. Playful framing, real figures only.",
     "",
     "GROUND TRUTH (cite ONLY these numbers — never invent or extrapolate any other figure):",
     `- Displayed cost: $${t.cost_usd}; complete spend (incl. floored short sessions): $${t.complete_spend_usd ?? t.cost_usd}`,
