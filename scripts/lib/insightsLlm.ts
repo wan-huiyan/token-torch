@@ -26,7 +26,7 @@ const MAX_RETRIES = 2;
 /** BUMP on any prompt / rule / model-mix-format change. The insights cache key
  *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
  *  this a prompt edit would serve STALE cached insights until the aggregates change. */
-export const INSIGHTS_PROMPT_VERSION = "2026-06-03-model-version-labels";
+export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice";
 
 /** "claude-opus-4-8" → "Opus 4.8" so the prompt feeds readable, version-distinct
  *  labels (the model was collapsing two Opus VERSIONS into an ambiguous
@@ -53,7 +53,8 @@ function buildContextBlock(data: DashboardData): string {
     )
     .join("\n");
   return [
-    "You are writing a short, honest weekly insights note over a developer's Claude Code usage data.",
+    "You are writing a short, PLAYFUL weekly insights note over a developer's Claude Code usage data — in the voice of its retro ARCADE dashboard (the UI has pixel flames for burned spend, rising coins, a sleepy moon for idle time, a ⚡ bolt for time saved).",
+    "VOICE: arcade / retro-game energy — a tasteful emoji accent or two (🔥 🪙 🌙 🎮 ⚡), light wordplay ('burned' for spend, 'sidekicks' for subagents, 'soaked up' / 'snoozing'), upbeat but never cutesy or hypey. This voice NEVER overrides the HARD RULES below: stay honest — cite only the listed numbers, describe SHARES not winners, and no superlatives. Playful framing, real figures.",
     "",
     "GROUND TRUTH (cite ONLY these numbers — never invent or extrapolate any other figure):",
     `- Displayed cost: $${t.cost_usd}; complete spend (incl. floored short sessions): $${t.complete_spend_usd ?? t.cost_usd}`,
@@ -75,7 +76,7 @@ function buildContextBlock(data: DashboardData): string {
     "6. Do NOT write any date, or any number (including incidental counts like 'top 3 projects') that is not in the citable list above — the validator rejects unlisted numbers and the UI already supplies the date. Spell out small structural counts as words if needed.",
     "7. When citing the model mix, name each model VERSION explicitly as given (e.g. 'Opus 4.7', 'Opus 4.8', 'Sonnet 4.6'). NEVER merge two versions into one ambiguous phrase like 'Opus X% and Y%' — keep each version's share attached to its version label.",
     "",
-    "FORMAT: markdown, starting with a bold header line, then 2–4 '- ' bullets. Keep it under 90 words.",
+    "FORMAT: markdown — a bold header line (a fun arcade-y title is welcome), then 2–4 '- ' bullets, each of which MAY open with a single emoji accent. Keep it under 90 words. Numbers and model-version labels stay exact.",
   ].join("\n");
 }
 
