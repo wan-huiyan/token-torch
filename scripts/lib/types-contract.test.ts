@@ -95,4 +95,17 @@ check("ContextOverhead is additive — a fixture without it still satisfies the 
   assert.equal(t.context_overhead?.reread_usd, 0.44);
 });
 
+check("SessionRow out_tokens/time_saved_min are additive optionals (Plan 5)", () => {
+  const bare: SessionRow = {
+    id: "a", date: "2026-06-03", project: "p", cost_usd: 1, cost_main: 1, cost_sub: 0,
+    active_min: 1, idle_min: 0, cache_pct: 0, subagents: 0, model: "opus", fidelity: "high",
+    top_tools: {}, detail_href: "/sessions/a",
+  };
+  assert.equal(bare.out_tokens, undefined);
+  assert.equal(bare.time_saved_min, undefined);
+  const withAxes: SessionRow = { ...bare, out_tokens: 4242, time_saved_min: 12 };
+  assert.equal(withAxes.out_tokens, 4242);
+  assert.equal(withAxes.time_saved_min, 12);
+});
+
 console.log(`\n${passed} types-contract checks passed`);
