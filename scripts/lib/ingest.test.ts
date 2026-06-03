@@ -99,7 +99,8 @@ const recStub = (over: Partial<SessionRecord>): SessionRecord => ({
   rawProjectDirs: ["d"], tokens: { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 },
   perModelTokens: { "claude-opus-4-8": { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 } },
   modelMsgCounts: { "claude-opus-4-8": 12 }, dominantModel: "opus", cacheHitPct: 0,
-  wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12, toolCounts: {}, hasUsage: true,
+  wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12,
+  scaffoldingFloor: 0, turnCount: 0, toolCounts: {}, hasUsage: true,
   ...over,
 });
 

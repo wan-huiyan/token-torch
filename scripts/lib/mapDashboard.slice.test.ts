@@ -17,7 +17,8 @@ const baseRec = (over: Partial<SessionRecord>): SessionRecord => ({
   rawProjectDirs: ["d"], tokens: { fresh_input: 100, output: 50, cache_write: 0, cache_read: 0 },
   perModelTokens: { "claude-opus-4-8": { fresh_input: 100, output: 50, cache_write: 0, cache_read: 0 } },
   modelMsgCounts: { "claude-opus-4-8": 20 }, dominantModel: "opus", cacheHitPct: 0,
-  wallClockMin: 5, activeMin: 5, idleMin: 0, assistantMsgCount: 20, toolCounts: { Bash: 3 }, hasUsage: true,
+  wallClockMin: 5, activeMin: 5, idleMin: 0, assistantMsgCount: 20,
+  scaffoldingFloor: 0, turnCount: 0, toolCounts: { Bash: 3 }, hasUsage: true,
   ...over,
 });
 
