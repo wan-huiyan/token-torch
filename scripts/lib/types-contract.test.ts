@@ -7,6 +7,8 @@ import type {
   EffortTag,
   SessionRow,
   SessionDetailData,
+  ContextOverhead,
+  DashboardData,
 } from "../../src/types";
 
 let passed = 0;
@@ -68,6 +70,29 @@ check("SessionDetailData accepts the same optional facet fields", () => {
   };
   assert.equal(widened.data_tier, "enriched");
   assert.ok(d !== undefined);
+});
+
+check("ContextOverhead is additive — a fixture without it still satisfies the types (Plan 8 / #10)", () => {
+  const co: ContextOverhead = {
+    scaffolding_tokens: 29000,
+    reread_tokens: 870000,
+    reread_usd: 0.44,
+    overhead_pct_of_input: 41.2,
+    subagent_scaffolding_tokens: 51000,
+    turns: 30,
+    note: "Estimate: base context re-read each turn; cache-read rate.",
+  };
+  assert.equal(co.scaffolding_tokens, 29000);
+  // additive: a row WITHOUT context_overhead is still a valid SessionRow.
+  const row: SessionRow = {
+    id: "a", date: "2026-06-03", project: "p", cost_usd: 1, cost_main: 1, cost_sub: 0,
+    active_min: 1, idle_min: 0, cache_pct: 50, subagents: 0, model: "opus",
+    fidelity: "main_loop", top_tools: {}, detail_href: "/sessions/a",
+  };
+  assert.equal(row.context_overhead, undefined);
+  // and totals can carry it.
+  const t: Pick<DashboardData["totals"], "context_overhead"> = { context_overhead: co };
+  assert.equal(t.context_overhead?.reread_usd, 0.44);
 });
 
 console.log(`\n${passed} types-contract checks passed`);
