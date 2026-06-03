@@ -219,6 +219,7 @@ export interface SessionRecord {
   ccVersion?: string;
   observedEffort?: string; // /effort marker value, if the transcript had one
   startedAtMs?: number;    // first event ms — for the effort confidence cutoff (ms precision)
+  timestampsMs?: number[];   // all event timestamps (for B4 5-hour-window derivation; in-memory only, not serialized)
 }
 
 const FLOOR_MIN_ASSISTANT_MSGS = 10;
@@ -323,6 +324,7 @@ export function buildSessionRecord(args: {
     ccVersion: parsed.ccVersion,
     ...(parsed.observedEffort ? { observedEffort: parsed.observedEffort } : {}),
     ...(parsed.timestampsMs.length ? { startedAtMs: parsed.timestampsMs[0] } : {}),
+    timestampsMs: parsed.timestampsMs,
   };
 }
 
