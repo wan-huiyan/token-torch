@@ -632,3 +632,18 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 
 @media (max-width:900px){.hero{grid-template-columns:1fr}.recs{grid-template-columns:1fr}}
 @media (max-width:560px){.winlabel{margin-left:0;width:100%}}
+
+/* B4 — 5-hour rolling-window panel (ported from dashboard.css; the redesign reuses
+   <BillingWindows> on the Timeline tab and these classes weren't in the ported sheet). */
+.bw-grid { display: flex; gap: 28px; flex-wrap: wrap; }
+.bw-stat { min-width: 170px; }
+.bw-big { font-size: 1.8rem; font-weight: 700; color: var(--amber); line-height: 1.1; }
+.bw-cap { font-size: .78rem; color: var(--ink-dim); margin-top: 2px; }
+.bw-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
+.bw-bar > i { display: block; height: 100%; }
+.bw-recent { display: flex; gap: 6px; align-items: flex-end; margin: 12px 0 4px; }
+.bw-win { flex: 1; min-width: 12px; display: flex; flex-direction: column; align-items: center; }
+.bw-win-bar { width: 100%; height: 44px; display: flex; align-items: flex-end; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+.bw-win-bar > i { width: 100%; display: block; background: var(--amber); }
+.bw-win-lab { font-size: .6rem; color: var(--ink-faint); margin-top: 3px; }
+.bw-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }

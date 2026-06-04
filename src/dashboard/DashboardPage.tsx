@@ -4,7 +4,7 @@
  * control) + 5 tabs. All windowed sections re-derive from <WindowProvider>.
  * Sections live in ./redesign/* and are composed here.
  * ========================================================================== */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DashboardData } from "../types";
 import { fmtStamp } from "./helpers";
 import { Starfield, FairyDust } from "./Ambient";
@@ -51,6 +51,9 @@ export function DashboardPage({
 
 function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpenSession: (id: string) => void; initialTab: DashTab }) {
   const [tab, setTab] = useState<DashTab>(initialTab);
+  // Sync when the route changes initialTab without a remount (e.g. #/ → #/breakdown
+  // via back/forward or in-app hashchange) — useState only honors its arg on mount.
+  useEffect(() => setTab(initialTab), [initialTab]);
   const { sessions } = useWindow();
 
   return (

@@ -224,7 +224,7 @@ export function WhereMoneyWent({ data }: { data: SessionDetailData }) {
       <div className="dsec-head">
         <h2>Where the money went</h2>
         <span className="ln" />
-        <span className="n">tokens ≠ bill</span>
+        <span className="n">tokens ≠ bill · <span className="est">≈ every $ is an estimate</span></span>
       </div>
 
       {bc ? (
