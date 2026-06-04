@@ -39,7 +39,7 @@ export function SessionHero({ data }: { data: SessionDetailData }) {
   // main/sub split — match the prototype denominator exactly (main / total).
   const main = data.cost.main_loop_usd;
   const sub = data.cost.subagent_usd;
-  const mp = Math.round((main / data.cost_usd) * 100);
+  const mp = data.cost_usd > 0 ? Math.round((main / data.cost_usd) * 100) : 100;
   const mStyle = useGrowWidth(mp);
   const sStyle = useGrowWidth(100 - mp);
 

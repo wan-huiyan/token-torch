@@ -39,9 +39,11 @@ export interface BurnBands {
 /** Fixed base-context cost: the system prompt + tool/skill catalog (+ earliest
  *  cached conversation) re-read into every turn and every subagent dispatch.
  *  Always an ESTIMATE (cache-read floor; understates after TTL re-writes, and is
- *  blind to deferred-tool-loading re-writes). The UI tags it [estimate]. The floor
- *  is a SMALL fixed slice — accumulating conversation history dominates spend; this
- *  is NOT framed as "the main waste". See docs/calibration/2026-06-03-context-overhead-calibration.md. */
+ *  blind to deferred-tool-loading re-writes). The UI tags it [estimate]. In DOLLARS the
+ *  floor is a SMALL fixed slice (cache reads are ~10× cheaper than fresh) — NOT "the main
+ *  waste". The redesign panel additionally surfaces the TOKEN-ratio view (reread_tokens /
+ *  input_fresh, ≈66× live = "the hidden bulk"); both are honest. See the S12 reframe in
+ *  docs/calibration/2026-06-03-context-overhead-calibration.md. */
 export interface ContextOverhead {
   scaffolding_tokens: number;          // base context re-read each turn (min nonzero cache_read)
   reread_tokens: number;               // scaffolding_tokens * turns (main loop) — ESTIMATE
