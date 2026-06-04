@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { DashboardData, SessionDetailData } from "./types";
 import { dashboardFixture, sessionDemo } from "./fixtures";
 import { DashboardPage } from "./dashboard/DashboardPage";
-import { BreakdownPage } from "./dashboard/BreakdownPage";
 import { SessionPage } from "./session/SessionPage";
 
 /* ---------------------------------------------------------------------------
@@ -119,10 +118,13 @@ export function App() {
     return <SessionRoute id={route.id} onBack={() => go("#/")} />;
   }
   if (dashboard.status !== "ready") return <Loading />;
-  if (route.name === "breakdown") {
-    return <BreakdownPage data={dashboard.data} onBack={() => go("#/")} />;
-  }
+  const openSession = (id: string) => go(`#/sessions/${encodeURIComponent(id)}`);
+  // #/breakdown folds into the dashboard's "Model & effort" tab (deep-link).
   return (
-    <DashboardPage data={dashboard.data} onOpenSession={(id) => go(`#/sessions/${encodeURIComponent(id)}`)} />
+    <DashboardPage
+      data={dashboard.data}
+      onOpenSession={openSession}
+      initialTab={route.name === "breakdown" ? "breakdown" : "sessions"}
+    />
   );
 }
