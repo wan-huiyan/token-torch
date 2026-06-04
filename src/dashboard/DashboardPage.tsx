@@ -1,73 +1,100 @@
 /* ============================================================================
- * TOKEN TORCH — all-sessions dashboard (aggregate-first).
- * Rendered entirely from one DashboardData object. Honesty behaviors (fidelity
- * split, small-N guard, reconciliation notes, time-saved zero-guard, estimate
- * framing) are first-class. The group-by toggle re-aggregates a NEUTRAL rollup
- * (never the superlative Podium copy) for week/model/effort; project keeps the
- * existing Podium. Cost panels are demoted below the session surface.
+ * TOKEN TORCH — dashboard shell (redesign). Tabbed "Mission Control" console:
+ * a kept-top region (topbar · ticker · hero · stat strip · podium · window
+ * control) + 5 tabs. All windowed sections re-derive from <WindowProvider>.
+ * Sections live in ./redesign/* and are composed here.
  * ========================================================================== */
-import "../styles-tokens.css";
-import "./dashboard.css";
 import { useState } from "react";
 import type { DashboardData } from "../types";
-import type { GroupBy } from "./aggregate";
+import { fmtStamp } from "./helpers";
 import { Starfield, FairyDust } from "./Ambient";
-import { Topbar } from "./Topbar";
-import { ArcadeTicker } from "./ArcadeTicker";
-import { HeroConsole } from "./HeroConsole";
-import { StatStrip } from "./StatStrip";
-import { GroupByToggle } from "./GroupByToggle";
-import { GroupRollup } from "./GroupRollup";
-import { Podium } from "./Podium";
-import { PlanBar } from "./PlanBar";
-import { TimelineChart } from "./TimelineChart";
-import { SessionTable } from "./SessionTable";
-import { Distributions } from "./Distributions";
-import { ContextOverhead } from "./ContextOverhead";
-import { BillingWindows } from "./BillingWindows";
-import { Recommendations } from "./Recommendations";
-import { Footer } from "./Footer";
+import { WindowProvider, useWindow } from "./useWindow";
+import { Topbar } from "./redesign/Topbar";
+import { Ticker } from "./redesign/Ticker";
+import { Hero } from "./redesign/Hero";
+import { StatStrip } from "./redesign/StatStrip";
+import { Podium } from "./redesign/Podium";
+import { WindowControl } from "./redesign/WindowControl";
+import { SessionsTab } from "./redesign/SessionsTab";
+import { TimelineTab } from "./redesign/TimelineTab";
+import { DistributionsTab } from "./redesign/DistributionsTab";
+import { ModelEffortTab } from "./redesign/ModelEffortTab";
+import { RecsTab } from "./redesign/RecsTab";
+import "./redesign.css";
+
+export type DashTab = "sessions" | "timeline" | "distributions" | "breakdown" | "recs";
+const TABS: { id: DashTab; label: string }[] = [
+  { id: "sessions", label: "Sessions" },
+  { id: "timeline", label: "Timeline" },
+  { id: "distributions", label: "Distributions" },
+  { id: "breakdown", label: "Model & effort" },
+  { id: "recs", label: "Recommendations" },
+];
 
 export function DashboardPage({
   data,
   onOpenSession,
+  initialTab = "sessions",
 }: {
   data: DashboardData;
   onOpenSession: (id: string) => void;
+  initialTab?: DashTab;
 }) {
-  const [groupBy, setGroupBy] = useState<GroupBy>("project");
-
   return (
-    <div className="tt-dash">
+    <WindowProvider data={data}>
       <Starfield />
       <FairyDust />
-      <main className="wrap">
-        <Topbar meta={data.meta} />
-        <ArcadeTicker data={data} />
-        {/* HeroConsole's right column IS the dashboard-level honest time-story (D1) — lead with it. */}
-        <section className="sec" style={{ marginTop: 8 }}>
-          <HeroConsole data={data} />
-          <StatStrip data={data} />
-        </section>
+      <Shell data={data} onOpenSession={onOpenSession} initialTab={initialTab} />
+    </WindowProvider>
+  );
+}
 
-        <PlanBar data={data} />
+function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpenSession: (id: string) => void; initialTab: DashTab }) {
+  const [tab, setTab] = useState<DashTab>(initialTab);
+  const { sessions } = useWindow();
 
-        {/* group-by toggle controls the aggregate surface below */}
-        <div className="gb-row">
-          <GroupByToggle value={groupBy} onChange={setGroupBy} />
+  return (
+    <div className="wrap">
+      <Topbar data={data} />
+      <Ticker data={data} />
+      <Hero data={data} />
+      <StatStrip data={data} />
+      <Podium data={data} />
+      <WindowControl data={data} />
+
+      <nav className="tabbar" role="tablist" aria-label="dashboard views">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={tab === t.id ? "on" : ""}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {t.id === "sessions" && <span className="cnt">{sessions.length}</span>}
+          </button>
+        ))}
+      </nav>
+
+      <div className="panel-wrap">
+        {tab === "sessions" && <SessionsTab data={data} onOpenSession={onOpenSession} />}
+        {tab === "timeline" && <TimelineTab data={data} />}
+        {tab === "distributions" && <DistributionsTab data={data} />}
+        {tab === "breakdown" && <ModelEffortTab data={data} />}
+        {tab === "recs" && <RecsTab data={data} />}
+      </div>
+
+      <footer>
+        <div className="fnote">
+          Session cost, active/idle minutes, cache % and token counts are <b>measured</b>; a few within-session splits are
+          estimates. Costs are an <b>estimate</b> from public per-model pricing — the Anthropic billing dashboard is
+          authoritative. {data.meta.fidelity_note}
         </div>
-        {groupBy === "project" ? <Podium data={data} /> : <GroupRollup data={data} by={groupBy} />}
-
-        <SessionTable data={data} onOpenSession={onOpenSession} />
-        <TimelineChart data={data} />
-
-        {/* cost/distribution panels demoted to supporting cast (decision #2) */}
-        <Distributions data={data} />
-        <ContextOverhead data={data} />
-        <BillingWindows data={data} />
-        <Recommendations data={data} />
-        <Footer meta={data.meta} />
-      </main>
+        <div>
+          SCHEMA <b>{data.meta.schema_version}</b> · GENERATED <b>{fmtStamp(data.meta.generated_at)}</b>
+        </div>
+      </footer>
     </div>
   );
 }
