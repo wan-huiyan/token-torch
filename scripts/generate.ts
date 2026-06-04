@@ -28,7 +28,9 @@ import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
 import type { SettingsFacts } from "./lib/effort";
-import { buildInsightsLLM, INSIGHTS_PROMPT_VERSION } from "./lib/insightsLlm";
+import { buildInsightsLLM } from "./lib/insightsLlm";
+import { buildInsightsRequest, INSIGHTS_PROMPT_VERSION } from "./lib/insightsPrompt";
+import { loadAgentInsights } from "./lib/insightsAgent";
 import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
 import { validateInsightNumbers } from "./lib/insightsValidate";
 
@@ -40,6 +42,8 @@ const OUT_DIR = join(ROOT, "public", "data");
 const CACHE_PATH = join(ROOT, ".cache", "ingest.json");
 const INSIGHTS_CACHE_PATH = join(ROOT, ".cache", "insights.json");
 const INSIGHTS_MODEL = "claude-opus-4-8";
+const INSIGHTS_REQUEST_PATH = join(ROOT, "insights-request.md");
+const AGENT_INSIGHTS_PATH = join(ROOT, "insights.local.md");
 const VERIFY = process.argv.includes("--verify");
 
 const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
@@ -344,13 +348,16 @@ function verify(
   // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
   // must trace to a dashboard-level aggregate (the honesty gate). Template path
   // (or null) is a no-op pass — templates only emit numbers from the same source.
-  if (dashboard.insights_source === "llm" && dashboard.insights_md) {
+  // Belt-and-suspenders: assert the no-fabrication gate for ANY non-template provenance
+  // (agent- or LLM-written). main() already guarantees only validated prose reaches here,
+  // so this is the independent re-check that fails the build if that guarantee ever breaks.
+  if ((dashboard.insights_source === "llm" || dashboard.insights_source === "agent") && dashboard.insights_md) {
     const { ok, offending } = validateInsightNumbers(dashboard.insights_md, dashboard);
     if (!ok)
       throw new Error(
-        `LLM insights cite number(s) absent from the dashboard aggregates: ${offending.join(", ")} — no fabricated number may ship.`,
+        `${dashboard.insights_source} insights cite number(s) absent from the dashboard aggregates: ${offending.join(", ")} — no fabricated number may ship.`,
       );
-    checks.push(`✓ LLM insights pass the no-fabrication check (every number traces to an aggregate)`);
+    checks.push(`✓ ${dashboard.insights_source} insights pass the no-fabrication check (every number traces to an aggregate)`);
   } else {
     checks.push(`✓ insights are template/none — no-fabrication check is a no-op`);
   }
@@ -403,33 +410,51 @@ async function main(): Promise<void> {
     droppedWithUsageUsd: ingest.droppedWithUsageUsd,
   };
 
-  // First pass: template insights (also the grounding source for the LLM path).
+  // First pass: template insights (also the grounding source for the agent prompt + LLM path).
   const base = mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts);
 
-  // LLM path is gated on the API key — offline/CI generate stays on templates.
-  let llmInsightsMd: string | null = null;
-  if (process.env.ANTHROPIC_API_KEY) {
+  // Always emit the paste-ready agent prompt (grounded facts + no-fab rules + output target)
+  // so a fresh clone can generate insights with its OWN agent — no API key required (#33).
+  writeFileSync(INSIGHTS_REQUEST_PATH, buildInsightsRequest(base.dashboard));
+  console.log("Insights: wrote insights-request.md — paste it to your agent (or run the token-torch-insights skill).");
+
+  // Resolve provenance in precedence order:
+  //   1. agent-written insights.local.md present + passes the no-fabrication gate -> "agent"
+  //   2. ANTHROPIC_API_KEY present -> LLM path -> "llm" (template on failure)
+  //   3. neither -> template
+  let insightsMd: string | null = null;
+  let insightsSource: "agent" | "llm" = "llm"; // back-compat default; only read when insightsMd is set (each branch sets it)
+
+  const agentMd = loadAgentInsights(AGENT_INSIGHTS_PATH, base.dashboard); // validated-or-null (logs on reject)
+  if (agentMd) {
+    insightsMd = agentMd;
+    insightsSource = "agent";
+    console.log("Insights: using agent-written insights.local.md (validated — no fabricated numbers).");
+  } else if (process.env.ANTHROPIC_API_KEY) {
     const hash = insightsHash(base.dashboard, INSIGHTS_MODEL, INSIGHTS_PROMPT_VERSION);
     const cached = readInsightsCache(INSIGHTS_CACHE_PATH, hash);
     if (cached) {
-      llmInsightsMd = cached;
-      console.log("Insights: cache hit (unchanged aggregates) — no API call.");
+      insightsMd = cached;
+      insightsSource = "llm";
+      console.log("Insights: LLM cache hit (unchanged aggregates) — no API call.");
     } else {
-      console.log("Insights: generating via Claude (no cache hit)…");
-      llmInsightsMd = await buildInsightsLLM(base.dashboard);
-      if (llmInsightsMd) {
-        writeInsightsCache(INSIGHTS_CACHE_PATH, hash, llmInsightsMd);
+      console.log("Insights: generating via Claude (no agent file, no cache hit)…");
+      const llm = await buildInsightsLLM(base.dashboard);
+      if (llm) {
+        insightsMd = llm;
+        insightsSource = "llm";
+        writeInsightsCache(INSIGHTS_CACHE_PATH, hash, llm);
         console.log("Insights: LLM-written + validated; cached.");
       }
       // null => buildInsightsLLM already logged the fallback; templates remain.
     }
   } else {
-    console.log("Insights: no ANTHROPIC_API_KEY — using template insights.");
+    console.log("Insights: no agent file + no ANTHROPIC_API_KEY — using template insights.");
   }
 
-  // Rebuild only if we have validated LLM prose; otherwise reuse the template pass.
-  const { dashboard, details, subagentTiming } = llmInsightsMd
-    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, llmInsightsMd)
+  // Rebuild only if we have validated agent/LLM prose; otherwise reuse the template pass.
+  const { dashboard, details, subagentTiming } = insightsMd
+    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource)
     : base;
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);

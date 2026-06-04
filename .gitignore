@@ -18,3 +18,8 @@ tt-*.png
 
 # incremental ingest cache (derived; regenerable)
 .cache/
+
+# Agent-handshake insights (#33): the emitted prompt + the agent's reply. Both carry
+# your real project names + cost figures (derived) → never commit; regenerated each run.
+insights-request.md
+insights.local.md
