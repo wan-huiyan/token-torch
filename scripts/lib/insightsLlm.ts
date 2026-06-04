@@ -19,12 +19,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { DashboardData } from "../../src/types";
 import { validateInsightNumbers } from "./insightsValidate";
-import { buildContextBlock, INSIGHTS_PROMPT_VERSION } from "./insightsPrompt";
+import { buildContextBlock } from "./insightsPrompt";
 
 // buildContextBlock + INSIGHTS_PROMPT_VERSION moved to the KEY-FREE ./insightsPrompt module
-// (so prompt-emission for the agent path doesn't pull in @anthropic-ai/sdk). Re-exported here
-// for back-compat so existing importers of INSIGHTS_PROMPT_VERSION keep resolving.
-export { INSIGHTS_PROMPT_VERSION };
+// (so prompt-emission for the agent path doesn't pull in @anthropic-ai/sdk); generate.ts
+// imports INSIGHTS_PROMPT_VERSION from there directly.
 
 const MODEL = "claude-opus-4-8";
 const MAX_RETRIES = 2;

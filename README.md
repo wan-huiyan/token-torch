@@ -45,5 +45,5 @@ its answer to `insights.local.md`, then re-run `pnpm generate`.
 
 **Optional API-key path (power users / CI):** set `ANTHROPIC_API_KEY` and `pnpm generate` will
 write the note itself via the Claude API (same no-fabrication gate). An invalid key simply falls
-back to the template — it never crashes generate. `insights.local.md` (if present) takes
-precedence over the API path.
+back to the template — it never crashes generate. `insights.local.md` (if present **and valid**)
+takes precedence over the API path; an invalid local file falls back to the API path (then template).
