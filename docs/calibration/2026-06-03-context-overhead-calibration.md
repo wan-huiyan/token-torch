@@ -81,3 +81,32 @@ This is the floor of base-context cost; it understates when the prefix is re-WRI
 after a TTL eviction (those re-writes are counted as productive, conservatively).
 Below the cache minimum (1,024 tok Opus 4.8 / Sonnet 4.6; 4,096 older) cache_read is 0,
 so the floor is undefined — render "no floor measurable", never "zero overhead".
+
+## S12 reframe (2026-06-04) — the redesign's "N× re-read" headline reconciled with this calibration
+
+The redesigned Distributions panel leads with a different VIEW of the same numbers: a
+**token RATIO** — `N× = round(reread_tokens / input_fresh)` — framed as *"≈N context tokens
+re-read from cache for every 1 fresh input token."* On the live corpus this is **≈66×**
+(reread ~1.98B / fresh ~29.9M), NOT the prototype mock's illustrative "51×" (which was a
+seeded placeholder — computed-from-real-fields per the no-fabrication rule).
+
+This does **not** contradict the "small fixed slice — never the headline $ waste" framing
+above. They are two honest views of different quantities:
+
+- **The 66× is a TOKEN ratio** — a huge MULTIPLE of tokens flows through, almost all of it
+  cache re-reads. This is "the hidden bulk" the panel surfaces: token counts dwarf the bill.
+- **The $ is still small / cache-cheap** — cache reads are ~10× cheaper than fresh input
+  (Anthropic pricing), so that 66× token bulk is a modest dollar slice (`overhead_pct_of_input`
+  ≈10–11% of input-side tokens; `reread_usd` priced at the cache-read rate). The panel copy
+  says so verbatim: *"served cheaply… a normal fixed cost; only a worry if fresh input stays
+  near zero."*
+
+So: **tokens-are-a-big-multiple (66×) AND dollars-are-a-small-cache-cheap-slice are BOTH true
+and now BOTH shown.** The reframe shifts the panel's *headline emphasis* from the $-floor to
+the token-ratio (the user's call — the 66× is the more arresting, and still-honest, framing),
+while the dollar honesty (cache-cheap, not "main waste") is preserved in the copy + caveats.
+The `scaffoldingFloor` $-metric documented above is unchanged; the 66× is an additional
+ratio surfaced from `reread_tokens` (real) and `input_fresh` (real). The panel's stacked bar
+is anchored to `reread_tokens + input_fresh` (so bar % and the 66× agree); it deliberately
+does NOT label the complement of `overhead_pct_of_input` as "fresh" (true fresh is ~1.5% of
+all input — calling 89% of it "fresh" would be a fabrication).
