@@ -42,7 +42,8 @@ export interface BurnBands {
  *  blind to deferred-tool-loading re-writes). The UI tags it [estimate]. In DOLLARS the
  *  floor is a SMALL fixed slice (cache reads are ~10× cheaper than fresh) — NOT "the main
  *  waste". The redesign panel additionally surfaces the TOKEN-ratio view (reread_tokens /
- *  input_fresh, ≈66× live = "the hidden bulk"); both are honest. See the S12 reframe in
+ *  input_fresh — a large multiple, computed live and drifting as the corpus grows =
+ *  "the hidden bulk"); both are honest. See the S12 reframe in
  *  docs/calibration/2026-06-03-context-overhead-calibration.md. */
 export interface ContextOverhead {
   scaffolding_tokens: number;          // base context re-read each turn (min nonzero cache_read)
