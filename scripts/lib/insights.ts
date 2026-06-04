@@ -14,10 +14,16 @@ export function buildFlags(
 
   const mainLoop = sessions.filter((s) => s.fidelity === "main_loop");
   if (mainLoop.length) {
+    // DISTINCT projects, capped — never dump every session's name (507 main-loop
+    // sessions previously produced a 14k-char detail blob of repeated project names).
+    const projs = [...new Set(mainLoop.map((s) => s.project))];
+    const shown = projs.slice(0, 6).join(", ");
+    const more = projs.length - 6;
+    const projList = more > 0 ? `${shown}, +${more} more` : shown;
     flags.push({
       level: "warn",
       title: `${mainLoop.length} session${mainLoop.length > 1 ? "s" : ""} undercount${mainLoop.length > 1 ? "" : "s"} subagents`,
-      detail: `${mainLoop.map((s) => s.project).join(", ")} ${mainLoop.length > 1 ? "are" : "is"} main-loop fidelity — real cost is higher than shown.`,
+      detail: `Main-loop fidelity in ${projList} — subagent spend isn't counted, so real cost is higher than shown.`,
       metric: "fidelity",
     });
   }
