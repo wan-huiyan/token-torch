@@ -86,9 +86,11 @@ so the floor is undefined — render "no floor measurable", never "zero overhead
 
 The redesigned Distributions panel leads with a different VIEW of the same numbers: a
 **token RATIO** — `N× = round(reread_tokens / input_fresh)` — framed as *"≈N context tokens
-re-read from cache for every 1 fresh input token."* On the live corpus this is **≈66×**
-(reread ~1.98B / fresh ~29.9M), NOT the prototype mock's illustrative "51×" (which was a
-seeded placeholder — computed-from-real-fields per the no-fabrication rule).
+re-read from cache for every 1 fresh input token."* On the live corpus this is a **large
+multiple (~60–66× at the time of writing, and DRIFTING as the corpus grows** — fresh input
+accumulates, so the exact factor must be read off the live `reread_tokens`/`input_fresh`,
+NEVER hardcoded here), NOT the prototype mock's illustrative "51×" (which was a seeded
+placeholder — the panel computes it from real fields per the no-fabrication rule).
 
 This does **not** contradict the "small fixed slice — never the headline $ waste" framing
 above. They are two honest views of different quantities:
