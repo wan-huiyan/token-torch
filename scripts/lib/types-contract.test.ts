@@ -108,4 +108,39 @@ check("SessionRow out_tokens/time_saved_min are additive optionals (Plan 5)", ()
   assert.equal(withAxes.time_saved_min, 12);
 });
 
+check("S11: SessionRow start_ts/headline/shipped_short/active_breakdown are additive optionals", () => {
+  const bare: SessionRow = {
+    id: "a", date: "2026-06-03", project: "p", cost_usd: 1, cost_main: 1, cost_sub: 0,
+    active_min: 1, idle_min: 0, cache_pct: 0, subagents: 0, model: "opus", fidelity: "high",
+    top_tools: {}, detail_href: "/sessions/a",
+  };
+  assert.equal(bare.start_ts, undefined);
+  assert.equal(bare.headline, undefined);
+  assert.equal(bare.shipped_short, undefined);
+  assert.equal(bare.active_breakdown, undefined);
+  const enriched: SessionRow = {
+    ...bare,
+    start_ts: "2026-06-03T09:00:00.000Z",
+    headline: "set up release automation for my repo",
+    shipped_short: "3 PRs · 2 reviews",
+    active_breakdown: { thinking_min: 4, tool_min: 2, subagent_min: 5, planning_min: 0 },
+  };
+  assert.equal(enriched.shipped_short, "3 PRs · 2 reviews");
+  assert.equal(enriched.active_breakdown?.subagent_min, 5);
+});
+
+check("S11: totals.tokens.total + context_overhead.reread_saved_usd are additive optionals", () => {
+  const tokens: DashboardData["totals"]["tokens"] = { input_fresh: 1, cache_read: 2, output: 3 };
+  assert.equal(tokens.total, undefined); // additive — bare literal compiles without it
+  const withTotal: DashboardData["totals"]["tokens"] = { ...tokens, total: 6 };
+  assert.equal(withTotal.total, 6);
+  const co: ContextOverhead = {
+    scaffolding_tokens: 1, reread_tokens: 2, reread_usd: 0.1, overhead_pct_of_input: 5,
+    subagent_scaffolding_tokens: 0, turns: 1, note: "est",
+  };
+  assert.equal(co.reread_saved_usd, undefined); // additive
+  const withSaved: ContextOverhead = { ...co, reread_saved_usd: 0.45 };
+  assert.equal(withSaved.reread_saved_usd, 0.45);
+});
+
 console.log(`\n${passed} types-contract checks passed`);

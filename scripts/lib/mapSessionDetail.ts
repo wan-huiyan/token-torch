@@ -43,8 +43,9 @@ function scaledPerDispatch(timings: SubagentDispatch[], subUsd: number): PerDisp
   return out.sort((a, b) => b.usd - a.usd);
 }
 
-/** Tools that are mostly "you answering" — excluded from the machine tool-time subtotal. */
-export const INTERACTIVE_TOOLS = new Set(["AskUserQuestion"]);
+// INTERACTIVE_TOOLS lives in timePhases.ts (the leaf module) to avoid an import
+// cycle; re-exported here so existing importers (generate.ts) stay unchanged.
+export { INTERACTIVE_TOOLS } from "./timePhases";
 
 
 /* ----------------------------------------------------------------------------
@@ -84,14 +85,26 @@ export function mapJsonlDetail(
       active_min: rec.activeMin,
       idle_min: rec.idleMin,
       wait_min: 0,
-      // raw log doesn't separate thinking/tool/subagent/planning → zeros (active-split degrades).
-      active_breakdown: { thinking_min: 0, tool_min: 0, subagent_min: 0, planning_min: 0 },
+      // S11: REAL per-phase split from the single-timeline walk (deriveTimePhases).
+      // thinking_min == model-gen (incl. thinking; not separately measurable);
+      // planning_min stays 0 (not honestly separable).
+      active_breakdown: rec.timePhases.active_breakdown,
       method_note:
-        "Derived from the raw transcript: consecutive-event gaps over 120s counted as you-away (idle), not compute. Per-phase breakdown / tool latency are not captured by the raw log (heuristic).",
+        "Derived from the raw transcript by walking one sorted event timeline: each gap is " +
+        "attributed to a subagent (Agent/Workflow open), a machine tool (other tool open), model " +
+        "generation (nothing open, ≤120s; incl. thinking), or you-away idle (>120s nothing open, OR " +
+        "an interactive AskUserQuestion open — that's you answering, not machine time). " +
+        "Parallel subagents are unioned over the timeline (never summed). This is genuine machine " +
+        "compute: it can exceed the headline active-minutes (long tool/subagent runs count even " +
+        "across a >120s gap) and can fall below it (interactive you-answering gaps are excluded). " +
+        "Subagent time counts only FOREGROUND runs the main loop waits on; background subagents " +
+        "(their work lives in separate transcripts) return a near-instant ack here, so subagent-" +
+        "minutes can read 0 even when subagents were dispatched.",
     },
-    timeline_segments: [], // not in the raw log → ribbon/pulse hidden
-    tool_time: [], // counts exist (top_tools) but no latency → leaderboard hidden
-    turns: [],
+    // S11: real contiguous-phase ribbon, per-tool wall-clock, per-turn latency.
+    timeline_segments: rec.timePhases.segments,
+    tool_time: rec.timePhases.tool_time,
+    turns: rec.timePhases.turns,
     tokens: {
       fresh_input: combinedTokens.fresh_input,
       output: combinedTokens.output,

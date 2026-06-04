@@ -3,7 +3,7 @@
  * Builds each session's detail first (canonical costs), then aggregates.
  * ========================================================================== */
 
-import type { DashboardData, ProjectRow, SessionRow, TimelinePoint, SessionDetailData } from "../../src/types";
+import type { DashboardData, ProjectRow, SessionRow, TimelinePoint, SessionDetailData, Shipped } from "../../src/types";
 import type { SessionGroup } from "./corpus";
 import { mapJsonlDetail } from "./mapSessionDetail";
 import type { SessionRecord } from "./ingest";
@@ -27,6 +27,28 @@ function topTools(tools: Record<string, number>, n = 4): Record<string, number> 
       .sort((a, b) => b[1] - a[1])
       .slice(0, n),
   );
+}
+
+/** Short "what shipped" card summary from a real Shipped object (counts only —
+ *  never a fabricated number). Returns undefined when nothing concrete shipped
+ *  (the caller omits the field — honest). */
+function shippedShort(s: Shipped): string | undefined {
+  const prCount = s.prs?.length ?? 0;
+  // reviews: top-level (unlinked) + nested under PRs.
+  const nestedReviews = (s.prs ?? []).reduce((n, pr) => n + (pr.reviews?.length ?? 0), 0);
+  const reviewCount = (s.reviews?.length ?? 0) + nestedReviews;
+  const directCommits = s.commits?.length ?? 0;
+  const parts: string[] = [];
+  if (prCount) parts.push(`${prCount} PR${prCount === 1 ? "" : "s"}`);
+  if (reviewCount) parts.push(`${reviewCount} review${reviewCount === 1 ? "" : "s"}`);
+  if (!prCount && directCommits) parts.push("direct commits");
+  if (parts.length) return parts.join(" · ");
+  // PRs/reviews/commits all absent → fall back to skills/adrs if present, else omit.
+  const skillCount = s.skills?.length ?? 0;
+  const adrCount = s.adrs?.length ?? 0;
+  if (skillCount) return `${skillCount} skill${skillCount === 1 ? "" : "s"}`;
+  if (adrCount) return `${adrCount} ADR${adrCount === 1 ? "" : "s"}`;
+  return undefined;
 }
 
 /** A cctime/usage-tracking record's own stored $ estimate, whichever schema it has.
@@ -114,6 +136,7 @@ export function mapDashboard(
   let ovSubScaffoldTok = 0;
   let ovTurns = 0;
   let ovMainInputSide = 0;
+  let ovRereadSavedUsd = 0;
 
   for (const rec of records) {
     fileCount += rec.rawProjectDirs.length; // transcripts merged for this session
@@ -147,6 +170,7 @@ export function mapDashboard(
     ovRereadUsd += context_overhead.reread_usd;
     ovSubScaffoldTok += context_overhead.subagent_scaffolding_tokens;
     ovTurns += context_overhead.turns;
+    ovRereadSavedUsd += context_overhead.reread_saved_usd ?? 0;
     for (const t of Object.values(rec.perModelTokens))
       ovMainInputSide += t.fresh_input + t.cache_write + t.cache_read;
 
@@ -186,8 +210,14 @@ export function mapDashboard(
       context_overhead,
       out_tokens: detail.tokens.output,
       time_saved_min: fb.available ? fb.timeSavedMin : 0,
-      top_tools: topTools(rec.toolCounts),
+      // n=25 covers ~all tools per session for the dashboard tool balloons (was n=4).
+      top_tools: topTools(rec.toolCounts, 25),
       detail_href: `/sessions/${detail.id}`,
+      // S11 additive card fields (all omitted when absent → honest degrade).
+      ...(rec.startedAtMs != null ? { start_ts: new Date(rec.startedAtMs).toISOString() } : {}),
+      ...(rec.headline ? { headline: rec.headline } : {}),
+      ...(shipped ? (() => { const ss = shippedShort(shipped); return ss ? { shipped_short: ss } : {}; })() : {}),
+      active_breakdown: detail.time.active_breakdown,
     });
   }
 
@@ -289,6 +319,7 @@ export function mapDashboard(
     subagent_scaffolding_tokens: ovSubScaffoldTok,
     turns: ovTurns,
     note: OVERHEAD_NOTE,
+    reread_saved_usd: round2(ovRereadSavedUsd), // Σ per-session (mirrors reread_usd)
   };
 
   const totals: DashboardData["totals"] = {
@@ -305,7 +336,8 @@ export function mapDashboard(
     sessions: rows.length,
     subagent_dispatches,
     cost_per_active_min: active_minutes ? round2(cost_usd / active_minutes) : 0,
-    tokens: tokensTotals,
+    // total = Σ corpus tokens (input_fresh + cache_read + output) — the mockup reads it.
+    tokens: { ...tokensTotals, total: tokensTotals.input_fresh + tokensTotals.cache_read + tokensTotals.output },
     avg_cache_hit_pct,
     // Measured from subagent transcripts (Σ spans − union). A lower bound when
     // coverage < 100% (see coverage flag) and slightly inflated by stall-retry
