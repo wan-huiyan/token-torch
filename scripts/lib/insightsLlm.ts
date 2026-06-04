@@ -57,23 +57,36 @@ async function callClaude(
 /** Produce validated LLM insights markdown, or null if validation can't be satisfied
  *  within MAX_RETRIES (caller falls back to templates). Requires ANTHROPIC_API_KEY in env. */
 export async function buildInsightsLLM(data: DashboardData): Promise<string | null> {
-  const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+  let client: Anthropic;
+  try {
+    client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+  } catch (err) {
+    console.warn(`⚠ Anthropic client init failed (${(err as Error).message}) — using template insights.`);
+    return null;
+  }
   const contextBlock = buildContextBlock(data);
   let correction: string | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const prose = await callClaude(client, contextBlock, correction);
-    if (!prose.trim()) {
-      correction = "Your previous response was empty. Write the insights note now, following all rules.";
-      continue;
+  try {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const prose = await callClaude(client, contextBlock, correction);
+      if (!prose.trim()) {
+        correction = "Your previous response was empty. Write the insights note now, following all rules.";
+        continue;
+      }
+      const { ok, offending } = validateInsightNumbers(prose, data);
+      if (ok) return prose.trim();
+      correction =
+        `Your previous note contained number(s) not present in the ground-truth data: ${offending.join(", ")}. ` +
+        `Rewrite the note using ONLY the citable numbers listed above. Do not invent or recompute any figure.`;
     }
-    const { ok, offending } = validateInsightNumbers(prose, data);
-    if (ok) return prose.trim();
-    correction =
-      `Your previous note contained number(s) not present in the ground-truth data: ${offending.join(", ")}. ` +
-      `Rewrite the note using ONLY the citable numbers listed above. Do not invent or recompute any figure.`;
+  } catch (err) {
+    // Invalid key (401), network, rate-limit, etc. — never crash generate; fall back to template.
+    console.warn(`⚠ LLM insights API call failed (${(err as Error).message}) — using template insights.`);
+    return null;
   }
 
+  // Validation never satisfied within MAX_RETRIES (NOT an API error) — template fallback.
   console.warn(
     "⚠ LLM insights failed the no-fabrication check after retries — falling back to template insights.",
   );
