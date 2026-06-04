@@ -143,12 +143,17 @@ function verify(
     for (const t of d.tool_time)
       if (INTERACTIVE_TOOLS.has(t.name) && !t.interactive)
         throw new Error(`[${d.id}] interactive tool ${t.name} not flagged`);
-    // 5. active_breakdown sums to active_min (to 0.15 min) — ONLY when the
-    //    breakdown was captured (all-zero => schema didn't record it; legitimate).
+    // 5. S11 REAL time-phase bounds (single-timeline walk). Phases are MACHINE
+    //    compute: long tool/subagent runs count even across a >120s gap (so the
+    //    total can EXCEED active_min, which calls any >120s gap you-away), while
+    //    interactive "you-answering" gaps are excluded (so it can fall BELOW
+    //    active_min too). The only hard bound is 0 ≤ each phase, total ≤ wall_clock.
     const ab = d.time.active_breakdown;
+    if (ab.thinking_min < 0 || ab.tool_min < 0 || ab.subagent_min < 0 || ab.planning_min < 0)
+      throw new Error(`[${d.id}] active_breakdown has a negative phase`);
     const abSum = ab.thinking_min + ab.tool_min + ab.subagent_min + ab.planning_min;
-    if (abSum > 0 && Math.abs(abSum - d.time.active_min) > 0.15)
-      throw new Error(`[${d.id}] active_breakdown ${abSum.toFixed(2)} != active_min ${d.time.active_min}`);
+    if (abSum > d.time.wall_clock_min + 0.5)
+      throw new Error(`[${d.id}] phase total ${abSum.toFixed(2)}m exceeds wall_clock ${d.time.wall_clock_min}m`);
     // 6. subagents_per_dispatch (when present) sums to subagent_usd (to the cent).
     if (d.cost.subagents_per_dispatch.length) {
       const sum = Math.round(d.cost.subagents_per_dispatch.reduce((s, x) => s + x.usd, 0) * 100);
@@ -159,6 +164,21 @@ function verify(
   checks.push(`✓ ${details.length} session details pass cost/fidelity/interactive/time invariants`);
   checks.push(
     `✓ per-model by_category sums to total_usd (check #1) for ${details.filter((d) => d.cost.by_category).length} sessions`,
+  );
+
+  // S11 time-phase coverage summary (real per-session split; bounds asserted in #5).
+  const withPhases = details.filter((d) => {
+    const ab = d.time.active_breakdown;
+    return ab.thinking_min + ab.tool_min + ab.subagent_min > 0;
+  });
+  const withSub = details.filter((d) => d.time.active_breakdown.subagent_min > 0).length;
+  const withSegs = details.filter((d) => d.timeline_segments.length > 0).length;
+  const withTurns = details.filter((d) => d.turns.length > 0).length;
+  const withTools = details.filter((d) => d.tool_time.length > 0).length;
+  checks.push(
+    `✓ time-phase bounds hold (0 ≤ each phase, phase-total ≤ wall_clock) for all ${details.length} sessions; ` +
+      `${withPhases.length} have a non-zero phase split (${withSub} with subagent time), ` +
+      `${withSegs} ribbon, ${withTools} tool-time, ${withTurns} per-turn`,
   );
 
   // cctime-transition: log how many JSONL-derived totals differ >5% from the overlay
@@ -299,6 +319,9 @@ function verify(
       throw new Error(
         `[${d.id}] context-overhead scaffolding_tokens ${co.scaffolding_tokens} exceeds input-side tokens ${inputSide}`,
       );
+    // S11: $-saved-vs-fresh is a non-negative premium (fresh_input ≥ cache_read for every family).
+    if (co.reread_saved_usd != null && co.reread_saved_usd < 0)
+      throw new Error(`[${d.id}] context-overhead reread_saved_usd ${co.reread_saved_usd} < 0`);
   }
   if (overheadSessions) {
     // aggregate sanity: dashboard total reread_tokens == Σ per-session (no silent drop).
@@ -307,10 +330,14 @@ function verify(
       throw new Error(
         `context-overhead aggregate reread_tokens ${dashboard.totals.context_overhead?.reread_tokens} != Σ per-session ${aggTok}`,
       );
+    const aggSaved = dashboard.totals.context_overhead?.reread_saved_usd ?? 0;
+    if (aggSaved < 0)
+      throw new Error(`context-overhead aggregate reread_saved_usd ${aggSaved} < 0`);
     checks.push(
       `✓ context-overhead bound holds for ${overheadSessions} session(s); ` +
         `aggregate re-read ${aggTok.toLocaleString()} tok ($${dashboard.totals.context_overhead?.reread_usd} est), ` +
-        `overhead ${dashboard.totals.context_overhead?.overhead_pct_of_input}% of input`,
+        `overhead ${dashboard.totals.context_overhead?.overhead_pct_of_input}% of input, ` +
+        `$${aggSaved} saved vs fresh`,
     );
   }
 
