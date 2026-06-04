@@ -50,6 +50,10 @@ export interface ContextOverhead {
   subagent_scaffolding_tokens: number; // Σ per-dispatch base-context floor across subagents (the N× story; 0 if none)
   turns: number;                       // turns that re-read the prefix
   note: string;                        // explicit estimate/scope caveat copy
+  /** S11 — optional/additive. What the re-read tokens WOULD have cost at the
+   *  fresh-input rate MINUS what they cost at the cache-read rate (per-model where
+   *  possible): the honest "$ saved vs paying fresh". ESTIMATE. Absent on older fixtures. */
+  reread_saved_usd?: number;
 }
 
 /** B4 — one reconstructed 5-hour rolling window (ccusage-faithful boundaries). ESTIMATE.
@@ -107,7 +111,12 @@ export interface DashboardData {
     subagent_dispatches: number;
     cost_per_active_min: number;
     avg_cache_hit_pct: number; // 0–100
-    tokens: { input_fresh: number; cache_read: number; output: number };
+    tokens: {
+      input_fresh: number; cache_read: number; output: number;
+      /** S11 — optional/additive. Σ corpus tokens (input_fresh+cache_read+output).
+       *  Absent on older fixtures. */
+      total?: number;
+    };
     time_saved_min: number; // est. wall-clock saved by parallel subagents
     time_saved_hours: number;
     /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
@@ -198,6 +207,18 @@ export interface SessionRow {
   out_tokens?: number;
   /** Plan 5 — optional + additive; parallel-subagent time saved this session (min). */
   time_saved_min?: number;
+  /** S11 — optional/additive. ISO start timestamp (serialized startedAtMs) — powers
+   *  the punchcard + card clock. Absent when the session had no timestamped event. */
+  start_ts?: string;
+  /** S11 — optional/additive. First real human prompt (trimmed ~120 chars) — card
+   *  memory-aid. Absent when no human prompt was found (honest). */
+  headline?: string;
+  /** S11 — optional/additive. Short "what shipped" summary (e.g. "3 PRs · 2 reviews").
+   *  Present ONLY when extractShipped produced a Shipped for this session (honest omit). */
+  shipped_short?: string;
+  /** S11 — optional/additive. Real per-session time-phase split (minutes of ACTIVE
+   *  wall-clock) for the dashboard phase donut. Absent on older fixtures. */
+  active_breakdown?: { thinking_min: number; tool_min: number; subagent_min: number; planning_min: number };
 }
 
 export interface Flag {

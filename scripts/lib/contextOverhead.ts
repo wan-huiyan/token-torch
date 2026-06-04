@@ -38,6 +38,23 @@ function effectiveCacheReadPerToken(perModelTokens: Record<string, TokenSet>): n
   return ratesForModel("opus").cache_read / 1_000_000;
 }
 
+/** Token-weighted (fresh_input − cache_read) $/token across the session's models —
+ *  the per-token PREMIUM you avoided by serving the re-read from cache instead of
+ *  paying fresh. Weighted by each model's cache_read tokens (same basis as above).
+ *  ≥ 0 for every family (cache_read < fresh_input). */
+function effectiveSavingPerToken(perModelTokens: Record<string, TokenSet>): number {
+  let tok = 0;
+  let usd = 0;
+  for (const [model, t] of Object.entries(perModelTokens)) {
+    const r = ratesForModel(model);
+    tok += t.cache_read;
+    usd += (t.cache_read * Math.max(0, r.fresh_input - r.cache_read)) / 1_000_000;
+  }
+  if (tok > 0) return usd / tok;
+  const r = ratesForModel("opus");
+  return Math.max(0, r.fresh_input - r.cache_read) / 1_000_000;
+}
+
 export function deriveContextOverhead(input: OverheadInput): ContextOverhead {
   const { scaffoldingFloor, turnCount, perModelTokens, subagentScaffoldingTokens } = input;
   const reread_tokens = scaffoldingFloor * turnCount;
@@ -48,6 +65,8 @@ export function deriveContextOverhead(input: OverheadInput): ContextOverhead {
 
   const reread_usd = round2(reread_tokens * effectiveCacheReadPerToken(perModelTokens));
   const overhead_pct_of_input = inputSide > 0 ? round2((reread_tokens / inputSide) * 100) : 0;
+  // honest "$ saved vs paying fresh": the re-read tokens × (fresh − cache_read) premium avoided.
+  const reread_saved_usd = round2(reread_tokens * effectiveSavingPerToken(perModelTokens));
 
   return {
     scaffolding_tokens: scaffoldingFloor,
@@ -57,5 +76,6 @@ export function deriveContextOverhead(input: OverheadInput): ContextOverhead {
     subagent_scaffolding_tokens: subagentScaffoldingTokens,
     turns: turnCount,
     note: OVERHEAD_NOTE,
+    reread_saved_usd,
   };
 }

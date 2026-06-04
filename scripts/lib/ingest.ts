@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { buildByCategoryPerModel, totalTokens, type TokenSet } from "./pricing";
 import { normalizeProject } from "./projects";
 import { parseEffortMarker } from "./effort";
+import { deriveTimePhases, type TimeEvent, type TimePhases } from "./timePhases";
 
 export const defaultProjectsDir = (): string => join(homedir(), ".claude", "projects");
 
@@ -70,6 +71,33 @@ export interface ParsedTranscript {
   timestampsMs: number[];                    // ALL row timestamps, sorted asc
   ccVersion?: string;
   observedEffort?: string;                   // value from a /effort local-command-stdout marker, if any (last-write-wins)
+  // S11 redesign: REAL time-phase analytics (deriveTimePhases over ALL rows). The
+  // raw events[] are NOT cached — only the derived result is stored here (bump
+  // CACHE_VERSION when this shape changes).
+  timePhases: TimePhases;
+  headline?: string;                         // first real human prompt text (trimmed), if any
+}
+
+/** Machine-message prefixes that are NOT a real human prompt (command wrappers,
+ *  caveats, system reminders, the agent task-notification relay). */
+const HEADLINE_NOISE_PREFIXES = ["<local-command-", "<command-", "<system-reminder", "<task-notification", "Caveat:"];
+
+/** A session's first REAL human prompt → a short card memory-aid. Collapses
+ *  control chars/newlines, strips a leading command/reminder wrapper line, trims
+ *  to ~120 chars. Returns undefined when nothing usable is found (honest omit). */
+export function cleanHeadline(raw: string): string | undefined {
+  let s = raw.replace(/\s+/g, " ").trim();
+  if (!s) return undefined;
+  for (const p of HEADLINE_NOISE_PREFIXES) if (s.startsWith(p)) return undefined;
+  if (s.length > 120) s = s.slice(0, 119).trimEnd() + "…";
+  return s || undefined;
+}
+
+/** True when a user-string row is machine noise (command/caveat/reminder/relay),
+ *  not a genuine human prompt. */
+function isNoiseUserString(s: string): boolean {
+  const t = s.trimStart();
+  return HEADLINE_NOISE_PREFIXES.some((p) => t.startsWith(p));
 }
 
 /** Parse one-or-more transcript files for ONE session (worktree fanout) into raw
@@ -82,6 +110,13 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
   // /effort marker: keep the value from the latest-timestamped genuine marker (last-write-wins).
   let observedEffort: string | undefined;
   let observedEffortTsMs = -Infinity;
+  // S11: ONE lightweight event per timestamped row → deriveTimePhases. Built in
+  // THIS loop (independent of the token dedup) so it covers the EXACT timestamp
+  // set deriveTime() walks — that makes timePhases-idle ⊆ deriveTime-idle by
+  // construction, so the verify() phase-sum bounds hold (advisor point #2).
+  const events: TimeEvent[] = [];
+  // first real human prompt (string content, not a command/caveat/reminder/relay) → card headline.
+  let headline: string | undefined;
 
   for (const p of paths) {
     let text: string;
@@ -105,6 +140,41 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
         const ts = Number.isNaN(rowTsMs) ? -Infinity : rowTsMs;
         if (val && ts >= observedEffortTsMs) { observedEffort = val; observedEffortTsMs = ts; }
       }
+
+      // ---- time-phase events: one event per TIMESTAMPED row (advisor point #2) ----
+      // sidechain rows are time-advancers only (their tool calls are subagent-internal),
+      // so they're kind:"other" — no open/close/turn semantics from the main walk.
+      if (!Number.isNaN(rowTsMs)) {
+        if (r.type === "assistant" && !r.isSidechain && r.message?.id) {
+          events.push({ ts: rowTsMs, kind: "assistant", msgId: r.message.id });
+          // a row's content may hold tool_use block(s) (Agent/Workflow/Bash/…); each
+          // opens a tool at this row's ts. (Blocks of one msg may span rows.)
+          for (const b of contentBlocks(r.message.content))
+            if (b.type === "tool_use" && b.id)
+              events.push({ ts: rowTsMs, kind: "tool_use", toolId: b.id, toolName: b.name });
+        } else if (r.type === "user" && !r.isSidechain) {
+          const c = r.message?.content;
+          if (Array.isArray(c)) {
+            let emittedResult = false;
+            for (const b of c)
+              if (b && typeof b === "object" && b.type === "tool_result" && b.tool_use_id) {
+                events.push({ ts: rowTsMs, kind: "tool_result", toolUseId: b.tool_use_id });
+                emittedResult = true;
+              }
+            if (!emittedResult) events.push({ ts: rowTsMs, kind: "other" });
+          } else if (typeof c === "string") {
+            // a STRING user content is a human prompt (turn trigger) — unless it's
+            // a command/caveat/reminder/relay wrapper, which is machine noise.
+            events.push({ ts: rowTsMs, kind: isNoiseUserString(c) ? "other" : "human" });
+            if (headline === undefined && !isNoiseUserString(c)) headline = cleanHeadline(c);
+          } else {
+            events.push({ ts: rowTsMs, kind: "other" });
+          }
+        } else {
+          events.push({ ts: rowTsMs, kind: "other" }); // sidechain / queue-op / hook / etc.
+        }
+      }
+
       if (r.type !== "assistant" || r.isSidechain) continue;
       const m = r.message;
       if (!m?.id || !m.usage) continue;
@@ -146,6 +216,8 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     scaffoldingFloor,
     turnCount,
     timestampsMs: timestamps.sort((a, b) => a - b),
+    timePhases: deriveTimePhases(events),
+    ...(headline ? { headline } : {}),
     ccVersion,
     ...(observedEffort ? { observedEffort } : {}),
   };
@@ -156,6 +228,15 @@ function collectTools(content: unknown, into: Record<string, number>): void {
   for (const b of content)
     if (b && typeof b === "object" && (b as any).type === "tool_use" && (b as any).name)
       into[(b as any).name] = (into[(b as any).name] ?? 0) + 1;
+}
+
+/** Normalize a message.content to an array of `{type,id,name,tool_use_id}` blocks
+ *  (string content → none). Used by the time-phase event collector. */
+function contentBlocks(content: unknown): Array<{ type: string; id?: string; name?: string; tool_use_id?: string }> {
+  if (!Array.isArray(content)) return [];
+  const out: Array<{ type: string; id?: string; name?: string; tool_use_id?: string }> = [];
+  for (const b of content) if (b && typeof b === "object" && (b as any).type) out.push(b as any);
+  return out;
 }
 
 /** Path-encoded project dir → logical base name (pre-alias). Strips the
@@ -220,6 +301,8 @@ export interface SessionRecord {
   observedEffort?: string; // /effort marker value, if the transcript had one
   startedAtMs?: number;    // first event ms — for the effort confidence cutoff (ms precision)
   timestampsMs?: number[];   // all event timestamps (for B4 5-hour-window derivation; in-memory only, not serialized)
+  timePhases: TimePhases;    // S11: real per-session time-phase analytics
+  headline?: string;         // S11: first real human prompt text (trimmed)
 }
 
 const FLOOR_MIN_ASSISTANT_MSGS = 10;
@@ -249,8 +332,13 @@ export interface IngestCache {
  *  `observedEffort`; a v1/legacy cache lacking it would downgrade observed sessions
  *  to inferred_default (an L9-class silent loss), so we discard on mismatch. v3 added
  *  scaffoldingFloor/turnCount; a v2 cache lacking them would serve 0 (silent
- *  under-report of context overhead), so we discard on mismatch. */
-export const CACHE_VERSION = 3;
+ *  under-report of context overhead), so we discard on mismatch. v4 (S11) added
+ *  timePhases + headline; a v3 cache lacking them would serve an empty time-phase
+ *  degrade (silent loss of the ribbon/donut/turns), so we discard on mismatch. v5
+ *  (S11) changed the phase classification — interactive (AskUserQuestion) gaps now
+ *  count as you-away idle, NOT machine tool_min; a v4 cache holds the old phase
+ *  results (tool_min inflated by you-answering time), so we discard on mismatch. */
+export const CACHE_VERSION = 5;
 interface CacheFile { version: number; entries: IngestCache; }
 
 export const cacheKeyFor = (path: string): string => path;
@@ -325,6 +413,8 @@ export function buildSessionRecord(args: {
     ...(parsed.observedEffort ? { observedEffort: parsed.observedEffort } : {}),
     ...(parsed.timestampsMs.length ? { startedAtMs: parsed.timestampsMs[0] } : {}),
     timestampsMs: parsed.timestampsMs,
+    timePhases: parsed.timePhases,
+    ...(parsed.headline ? { headline: parsed.headline } : {}),
   };
 }
 
