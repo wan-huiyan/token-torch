@@ -59,7 +59,7 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
       <Ticker data={data} />
       <Hero data={data} />
       <StatStrip data={data} />
-      <Podium data={data} onOpenSession={onOpenSession} />
+      <Podium data={data} />
       <WindowControl data={data} />
 
       <nav className="tabbar" role="tablist" aria-label="dashboard views">
