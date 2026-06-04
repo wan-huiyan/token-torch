@@ -18,58 +18,15 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { DashboardData } from "../../src/types";
-import { allowedNumbers, validateInsightNumbers } from "./insightsValidate";
-import { prettyModelId } from "../../src/shared/models";
+import { validateInsightNumbers } from "./insightsValidate";
+import { buildContextBlock } from "./insightsPrompt";
+
+// buildContextBlock + INSIGHTS_PROMPT_VERSION moved to the KEY-FREE ./insightsPrompt module
+// (so prompt-emission for the agent path doesn't pull in @anthropic-ai/sdk); generate.ts
+// imports INSIGHTS_PROMPT_VERSION from there directly.
 
 const MODEL = "claude-opus-4-8";
 const MAX_RETRIES = 2;
-
-/** BUMP on any prompt / rule / model-mix-format change. The insights cache key
- *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
- *  this a prompt edit would serve STALE cached insights until the aggregates change. */
-export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice-2";
-
-/** The stable, cacheable context block: the grounding facts + the rules. Built
- *  once per call; byte-identical across the regen retries so the cache holds. */
-function buildContextBlock(data: DashboardData): string {
-  const t = data.totals;
-  const allowed = allowedNumbers(data)
-    .map((n) => (Number.isInteger(n) ? String(n) : n.toFixed(2)))
-    .join(", ");
-  const projectLines = data.projects
-    .slice(0, 5)
-    .map(
-      (p) =>
-        `  - ${p.name}: $${p.cost_usd} (${Math.round(p.cost_share * 100)}% of total), ${p.sessions} sessions, $${p.cost_per_session}/session`,
-    )
-    .join("\n");
-  return [
-    "You are writing a short, PLAYFUL weekly insights note over a developer's Claude Code usage data — in the voice of its retro ARCADE dashboard (the UI has pixel flames for burned spend, rising coins, a sleepy moon for idle time, a ⚡ bolt for time saved).",
-    "VOICE: arcade / retro-game energy — a tasteful emoji accent or two (🔥 🪙 🌙 🎮 ⚡), light wordplay ('burned' for spend, 'sidekicks' for subagents, 'soaked up' / 'snoozing'), upbeat but never cutesy or hypey. This voice NEVER overrides the HARD RULES below: stay honest — cite only the listed numbers, describe SHARES not winners, and no superlatives. The wordplay is LEXICAL, not numeric: invent NO figures — no game 'scores', 'levels', '1-ups', or counts that aren't in the citable list. Playful framing, real figures only.",
-    "",
-    "GROUND TRUTH (cite ONLY these numbers — never invent or extrapolate any other figure):",
-    `- Displayed cost: $${t.cost_usd}; complete spend (incl. floored short sessions): $${t.complete_spend_usd ?? t.cost_usd}`,
-    `- Sessions: ${t.sessions}; subagent dispatches: ${t.subagent_dispatches}; avg cache hit: ${t.avg_cache_hit_pct}%`,
-    `- Active: ${t.active_hours}h; idle: ${t.idle_hours}h; time saved (parallel subagents, a floor): ${t.time_saved_hours}h`,
-    `- Projects (top 5 by cost):`,
-    projectLines,
-    `- Model mix (% of assistant messages): ${Object.entries(data.distributions.model_mix).map(([m, p]) => `${prettyModelId(m)} ${p}%`).join(", ")}`,
-    `- Full set of citable numbers: ${allowed}`,
-    "",
-    "HARD RULES:",
-    "1. Every number you write MUST be one of the citable numbers above. Do not compute new ratios, sums, or trends the data doesn't already contain.",
-    "2. The model versions above are time-disjoint — describe the model BREAKDOWN, never a performance COMPARISON (do NOT say one model is better/faster/cheaper than another).",
-    data.meta.small_n
-      ? "3. small_n is TRUE: there are too few sessions for trend claims. Write an empty-state note only — no week-over-week or trend language."
-      : "3. You may describe the current window, but make no causal claims the data can't support.",
-    "4. Costs are ESTIMATES from per-model list rates (the billing dashboard is authoritative). Say 'estimated' where natural.",
-    "5. No superlatives or causal language ('because', 'caused', 'best') beyond what the numbers plainly show.",
-    "6. Do NOT write any date, or any number (including incidental counts like 'top 3 projects') that is not in the citable list above — the validator rejects unlisted numbers and the UI already supplies the date. Spell out small structural counts as words if needed.",
-    "7. When citing the model mix, name each model VERSION explicitly as given (e.g. 'Opus 4.7', 'Opus 4.8', 'Sonnet 4.6'). NEVER merge two versions into one ambiguous phrase like 'Opus X% and Y%' — keep each version's share attached to its version label.",
-    "",
-    "FORMAT: markdown — a bold header line (a fun arcade-y title is welcome), then 2–4 '- ' bullets, each of which MAY open with a single emoji accent. Keep it under 90 words. Numbers and model-version labels stay exact.",
-  ].join("\n");
-}
 
 /** One API call. Returns the first text block's markdown (or "" if none). */
 async function callClaude(
@@ -99,23 +56,36 @@ async function callClaude(
 /** Produce validated LLM insights markdown, or null if validation can't be satisfied
  *  within MAX_RETRIES (caller falls back to templates). Requires ANTHROPIC_API_KEY in env. */
 export async function buildInsightsLLM(data: DashboardData): Promise<string | null> {
-  const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+  let client: Anthropic;
+  try {
+    client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+  } catch (err) {
+    console.warn(`⚠ Anthropic client init failed (${(err as Error).message}) — using template insights.`);
+    return null;
+  }
   const contextBlock = buildContextBlock(data);
   let correction: string | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const prose = await callClaude(client, contextBlock, correction);
-    if (!prose.trim()) {
-      correction = "Your previous response was empty. Write the insights note now, following all rules.";
-      continue;
+  try {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const prose = await callClaude(client, contextBlock, correction);
+      if (!prose.trim()) {
+        correction = "Your previous response was empty. Write the insights note now, following all rules.";
+        continue;
+      }
+      const { ok, offending } = validateInsightNumbers(prose, data);
+      if (ok) return prose.trim();
+      correction =
+        `Your previous note contained number(s) not present in the ground-truth data: ${offending.join(", ")}. ` +
+        `Rewrite the note using ONLY the citable numbers listed above. Do not invent or recompute any figure.`;
     }
-    const { ok, offending } = validateInsightNumbers(prose, data);
-    if (ok) return prose.trim();
-    correction =
-      `Your previous note contained number(s) not present in the ground-truth data: ${offending.join(", ")}. ` +
-      `Rewrite the note using ONLY the citable numbers listed above. Do not invent or recompute any figure.`;
+  } catch (err) {
+    // Invalid key (401), network, rate-limit, etc. — never crash generate; fall back to template.
+    console.warn(`⚠ LLM insights API call failed (${(err as Error).message}) — using template insights.`);
+    return null;
   }
 
+  // Validation never satisfied within MAX_RETRIES (NOT an API error) — template fallback.
   console.warn(
     "⚠ LLM insights failed the no-fabrication check after retries — falling back to template insights.",
   );

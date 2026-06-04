@@ -4,8 +4,8 @@
  * renderRecs. Binds the REAL data.flags[] and data.insights_md; honesty mined
  * from the old Recommendations.tsx:
  *   - flags render only when present (honest-empty state otherwise — no fab);
- *   - the AI-written provenance tag appears ONLY when insights_source === "llm",
- *     and uses a pixel STAR sprite (no emoji glyph) for chat-no-emoji chrome;
+ *   - the provenance tag appears when insights_source is "llm" ("AI-written") or
+ *     "agent" ("written by your agent"); a pixel STAR sprite (no emoji glyph);
  *   - the LLM prose itself (md()-rendered) may contain emoji — that's the model's
  *     content/voice, rendered verbatim (the no-fab validator gates it at gen-time);
  *   - null insights_md → tasteful placeholder (no fabrication).
@@ -75,10 +75,10 @@ export function RecsTab({ data }: { data: DashboardData }) {
         <div className="ih">
           <Sprite className="ihbot" mount={(host) => mountMascot(host, 2)} />
           <span>auto-generated insights</span>
-          {data.insights_source === "llm" && (
+          {(data.insights_source === "llm" || data.insights_source === "agent") && (
             <span className="ai-tag" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
               <Sprite mount={(host) => void mountIcon(host, "star", 2)} />
-              AI-written
+              {data.insights_source === "agent" ? "written by your agent" : "AI-written"}
             </span>
           )}
         </div>

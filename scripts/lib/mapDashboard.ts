@@ -112,10 +112,14 @@ export function mapDashboard(
   floor: FloorStats,
   projectsDir: string = defaultProjectsDir(),
   settings: SettingsFacts = { settingsEffort: null, settingsMtimeMs: null },
-  /** Pre-computed, already-validated LLM insights markdown. When provided (non-null),
-   *  it replaces the template insights and marks the source "llm". Computed async in
-   *  generate.ts so this function stays sync + pure. Absent/null => template path. */
+  /** Pre-computed, already-validated insights markdown (agent- or LLM-written). When
+   *  provided (non-null), it replaces the template insights. Computed before this call
+   *  (async LLM path / synchronous agent-file read) so this function stays sync + pure.
+   *  Absent/null => template path. */
   llmInsightsMd: string | null = null,
+  /** Provenance to stamp when `llmInsightsMd` is non-null. Defaults to "llm" so the
+   *  existing single-arg LLM call site is unchanged; the agent path passes "agent". */
+  insightsSource: "llm" | "agent" = "llm",
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
@@ -411,7 +415,7 @@ export function mapDashboard(
     },
     flags,
     insights_md: llmInsightsMd ?? buildInsightsMd(generatedDate, totals, projects, small_n),
-    insights_source: llmInsightsMd ? "llm" : "template",
+    insights_source: llmInsightsMd ? insightsSource : "template",
     plan: loadPlanConfig(rows),
     billing_windows: deriveBillingWindows(eventsFromRecords(records), Date.parse(generatedAtIso)),
   };

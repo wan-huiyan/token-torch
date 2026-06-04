@@ -101,4 +101,19 @@ check("out_tokens + time_saved_min populated on the row (Plan 5 axes)", () => {
   assert.equal(typeof row.time_saved_min, "number"); // 0 with no subagents
 });
 
+// insights_source reflects the explicit discriminator (#33): agent prose -> "agent",
+// llm prose (default 8th arg) -> "llm", no prose -> "template". Inline idiom + emptyDir
+// for determinism (matches the other checks in this file).
+check("mapDashboard bakes insights_source from the explicit discriminator", () => {
+  const md = "**Note**\n- ok\n";
+  const rec = baseRec({ id: "ins00001" });
+  const agent = mapDashboard([rec], new Map(), "2026-06-01T00:00:00.000Z", floor, emptyDir, settings, md, "agent");
+  assert.equal(agent.dashboard.insights_source, "agent");
+  assert.equal(agent.dashboard.insights_md, md);
+  const llm = mapDashboard([rec], new Map(), "2026-06-01T00:00:00.000Z", floor, emptyDir, settings, md); // default source
+  assert.equal(llm.dashboard.insights_source, "llm");
+  const tmpl = mapDashboard([rec], new Map(), "2026-06-01T00:00:00.000Z", floor, emptyDir, settings); // no prose
+  assert.equal(tmpl.dashboard.insights_source, "template");
+});
+
 console.log(`\n${passed} mapDashboard.slice checks passed`);
