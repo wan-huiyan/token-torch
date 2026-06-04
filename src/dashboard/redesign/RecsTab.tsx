@@ -17,6 +17,7 @@ import type { DashboardData, Flag } from "../../types";
 import { md } from "../helpers";
 import { Sprite } from "../Sprite";
 import { mountFlame, mountMascot, mountIcon } from "../spriteEngine";
+import { useWindow } from "../useWindow";
 
 /** Mount the pixel-sprite icon for a flag, keyed on metric/level — verbatim from
  *  renderRecs's icoFor() + its mount switch (flame uses mountFlame inferno; all
@@ -41,8 +42,17 @@ function FlagIcon({ flag }: { flag: Flag }) {
 
 export function RecsTab({ data }: { data: DashboardData }) {
   const ins = md(data.insights_md);
+  const { isAll } = useWindow();
   return (
     <div className="recs">
+      {!isAll && (
+        <div
+          className="fd"
+          style={{ gridColumn: "1 / -1", fontFamily: "var(--mono)", fontSize: ".72rem", color: "var(--ink-faint)", marginBottom: 4 }}
+        >
+          Flags &amp; insights are generated across <b>all sessions</b> (computed at generate-time) — they don't re-scope to the selected time window.
+        </div>
+      )}
       <div className="flags">
         {data.flags.length > 0 ? (
           data.flags.map((f, i) => (
@@ -56,7 +66,7 @@ export function RecsTab({ data }: { data: DashboardData }) {
           ))
         ) : (
           <div className="fd" style={{ padding: "15px 17px", fontFamily: "var(--mono)" }}>
-            No flags — nothing notable to surface for this window.
+            No flags — nothing notable to surface.
           </div>
         )}
       </div>
@@ -78,7 +88,7 @@ export function RecsTab({ data }: { data: DashboardData }) {
           <div dangerouslySetInnerHTML={{ __html: ins }} />
         ) : (
           <div className="insights-empty">
-            <p>No auto-insight generated for this window.</p>
+            <p>No auto-insight generated yet.</p>
             <p>Insights appear once there's enough signal.</p>
           </div>
         )}

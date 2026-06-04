@@ -5,7 +5,7 @@
  * always write the FINAL value first (reduced-motion / background-tab safe).
  * Self-contained in src/session/ (must not import from ../dashboard/).
  * ========================================================================== */
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 
 export const usd = (v: number, c = true): string =>
   "$" + v.toLocaleString("en-US", { minimumFractionDigits: c ? 2 : 0, maximumFractionDigits: c ? 2 : 0 });
@@ -54,18 +54,26 @@ export function splitMoney(v: number): { dollars: number; cents: string } {
 export type { BurnTier, BurnBands } from "../shared/burnTier";
 export { burnTier } from "../shared/burnTier";
 
-/* ---------------- reduced-motion ---------------- */
+/* ---------------- reduced-motion (shared single subscription) ----------------
+ * ONE module-level MediaQueryList read via useSyncExternalStore → a runtime
+ * motion-preference toggle triggers one coordinated re-render across all consumers,
+ * not N setState-in-effect storms (which tripped React's update-depth guard).
+ * Signature unchanged. (Mirrors src/dashboard/helpers.ts.) */
+let _rmMql: MediaQueryList | null | undefined;
+function rmQuery(): MediaQueryList | null {
+  if (_rmMql === undefined) {
+    _rmMql = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  }
+  return _rmMql;
+}
+function rmSubscribe(cb: () => void): () => void {
+  const mq = rmQuery();
+  mq?.addEventListener?.("change", cb);
+  return () => mq?.removeEventListener?.("change", cb);
+}
+const rmSnapshot = (): boolean => rmQuery()?.matches ?? false;
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (!window.matchMedia) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(rmSubscribe, rmSnapshot, () => false);
 }
 
 /* ----------------------------------------------------------------------------

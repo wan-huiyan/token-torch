@@ -688,6 +688,7 @@ function WhenNote({
 
 function OverheadPanel({ data }: { data: DashboardData }) {
   const co = data.totals.context_overhead;
+  const { isAll } = useWindow();
   if (!co || co.reread_tokens <= 0) return null;
 
   const fresh = data.totals.tokens.input_fresh;
@@ -701,7 +702,7 @@ function OverheadPanel({ data }: { data: DashboardData }) {
     <div className="ovpanel">
       <div className="ov-head">
         <h4>Context re-read · the hidden bulk</h4>
-        <span>why token counts dwarf the actual work</span>
+        <span>why token counts dwarf the actual work{!isAll && " · all-time (not windowed)"}</span>
       </div>
       <div className="ov-body">
         <div className="ov-hero">
