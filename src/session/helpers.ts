@@ -71,7 +71,11 @@ function rmSubscribe(cb: () => void): () => void {
   mq?.addEventListener?.("change", cb);
   return () => mq?.removeEventListener?.("change", cb);
 }
-const rmSnapshot = (): boolean => rmQuery()?.matches ?? false;
+// MAXIMUM FUN (S15): the session screen's decorative motion is ALWAYS on — the snapshot never
+// reports "reduced", so the fairy-dust / sprites / count-up always animate (owner call; matches
+// spriteEngine). Subscription stays wired for a future opt-in toggle. Because `reduced` never
+// becomes true, the Ambient toggle re-render storm (#44) cannot fire.
+const rmSnapshot = (): boolean => false;
 export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(rmSubscribe, rmSnapshot, () => false);
 }

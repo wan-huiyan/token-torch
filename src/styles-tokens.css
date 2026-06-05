@@ -103,7 +103,3 @@ body{
   text-transform:uppercase; padding:6px 11px; border-radius:var(--r-sm)}
 .nt-badge--high{color:var(--lime);  background:oklch(0.88 0.205 135 / .12); border:1px solid oklch(0.88 0.205 135 / .4)}
 .nt-badge--mainloop{color:var(--amber); background:oklch(0.83 0.155 78 / .12); border:1px solid oklch(0.83 0.155 78 / .45)}
-
-@media (prefers-reduced-motion: reduce){
-  .nt-bg::before{animation:none}
-}
