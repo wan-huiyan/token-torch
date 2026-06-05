@@ -194,7 +194,10 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
   // --- #37 vacuity: forbidden superlative / comparison / causal phrases (HARD RULES 2 & 5). ---
   // The number scan owns fabrication; this owns value judgments the data cannot support —
   // even a superlative WITH a valid number ("Best week ever — $12,679.22!") is rejected.
-  const claims = [...new Set([...prose.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
+  // Scan the markdown-stripped `flat` (computed above), NOT raw prose: `_` is a \w char so
+  // `\b` has no boundary at `_best_`, and `**` splitting a word (`b**est**`) breaks the match —
+  // either would let an emphasised superlative evade the gate (review-panel catch).
+  const claims = [...new Set([...flat.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
 
   return { ok: offending.length === 0 && claims.length === 0, offending, claims };
 }

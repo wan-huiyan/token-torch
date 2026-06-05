@@ -297,6 +297,17 @@ check("a number-free superlative is rejected (the original vacuity case)", () =>
   assert.ok(r.claims.length > 0);
 });
 
+// Markdown emphasis must NOT smuggle a superlative past the gate. `_` is a \w char, so
+// \b has no boundary at `_best`; `**` splitting a word (`b**est**`) breaks contiguity. The
+// claims scan must run on the markdown-stripped text (the #24 binding pass already does).
+check("an underscore/split-emphasis superlative is still rejected (markdown can't evade the gate)", () => {
+  for (const md of ["_best_ week ever!", "__worst__ ever", "this run was _faster_ than before", "a _record-breaking_ blowout", "b**est** week"]) {
+    const r = validateInsightNumbers(md, fixture());
+    assert.equal(r.ok, false, `emphasis must not evade: ${JSON.stringify(md)}`);
+    assert.ok(r.claims.length > 0, `expected a claim flagged for ${JSON.stringify(md)}, got ${JSON.stringify(r.claims)}`);
+  }
+});
+
 // FALSE-POSITIVE GUARDS — factual cost/size rankings + arcade voice MUST pass. The live
 // template writes "your priciest project"; insights.ts writes "sessions on record"; the
 // live arcade voice writes "Opus 4.8 led the mix". None are forbidden value judgments.
