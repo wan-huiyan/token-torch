@@ -81,7 +81,12 @@ function rmSubscribe(cb: () => void): () => void {
   mq?.addEventListener?.("change", cb);
   return () => mq?.removeEventListener?.("change", cb);
 }
-const rmSnapshot = (): boolean => rmQuery()?.matches ?? false;
+// MAXIMUM FUN (S15): the dashboard's decorative motion is ALWAYS on — the snapshot never
+// reports "reduced", so FairyDust / starfield / count-up always animate (owner call; matches
+// spriteEngine). The subscription stays wired so a future opt-in "reduce animations" toggle
+// can flip this to a real preference read. (Also why the session Ambient toggle-storm #44
+// can't fire: `reduced` never becomes true.)
+const rmSnapshot = (): boolean => false;
 export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(rmSubscribe, rmSnapshot, () => false);
 }

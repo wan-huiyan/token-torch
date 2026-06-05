@@ -16,7 +16,6 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 @keyframes botbob{0%{transform:translateY(0) rotate(-2.5deg)}50%{transform:translateY(-4px) rotate(2.5deg)}100%{transform:translateY(0) rotate(-2.5deg)}}
 .dbrand .mk:hover canvas.mascot{animation:botwiggle .55s ease}
 @keyframes botwiggle{0%,100%{transform:translateY(0) rotate(0)}20%{transform:translateY(-6px) rotate(-10deg)}55%{transform:translateY(-6px) rotate(10deg)}80%{transform:translateY(-2px) rotate(-4deg)}}
-@media (prefers-reduced-motion:reduce){canvas.mascot{animation:none!important}}
 .dbrand b{letter-spacing:.16em;font-size:.86rem;color:var(--ink);font-weight:800}
 .dbrand small{display:block;font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint)}
 
@@ -42,14 +41,12 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 .toolrow.inter .tn{display:inline-flex;align-items:center;gap:4px}
 .interflag{display:flex;align-items:center;gap:8px}
 .hg-flip-host{display:inline-flex}
-@media (prefers-reduced-motion:reduce){.hg-flip{animation:none}}
 .weekend-banner{display:flex;gap:13px;align-items:center;background:oklch(0.74 0.19 350 / .08);border:1px solid oklch(0.74 0.19 350 / .4);border-left-width:3px;border-radius:14px;padding:15px 18px;margin-top:16px}
 .weekend-banner .wkic{font-size:1.6rem;flex:none;filter:drop-shadow(0 0 9px oklch(0.74 0.19 350 / .55));animation:wkwobble 2.4s ease-in-out infinite}
 @keyframes wkwobble{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
 .weekend-banner div{font-size:.92rem;color:var(--ink-dim);line-height:1.5}
 .weekend-banner b{color:var(--magenta)}
 .weekend-banner .wkdim{color:var(--ink-faint);font-style:italic}
-@media (prefers-reduced-motion:reduce){.weekend-banner .wkic{animation:none}}
 .dproj{font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--ink);margin:2px 0 4px;word-break:break-word}
 .dmeta{font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);letter-spacing:.05em}
 .dcost{font-family:var(--mono);font-weight:700;font-size:clamp(2.6rem,8vw,3.6rem);color:var(--cyan);line-height:1;margin:16px 0 0;text-shadow:0 0 24px oklch(0.83 0.145 210 / .4)}
@@ -126,7 +123,6 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 .coinfall{position:absolute;image-rendering:pixelated;pointer-events:none;z-index:4}
 .savings .sv{animation:dnumpulse 3.6s ease-in-out infinite}
 .savings .sv{text-shadow:0 0 22px oklch(0.88 0.205 135 / .4)}
-@media (prefers-reduced-motion:reduce){.dcost,.ribbon,.ribbon::before,.rib-sprite,.rib-zzz,.donut svg,.pulse i,.invbar .track i,.savings .sv{animation:none!important}.ribbon{transform:none}.ribbon::before{display:none}}
 
 /* time grid: donut + tools + pulse */
 .tgrid{display:grid;grid-template-columns:minmax(0,440px) 1fr;gap:18px;margin-top:16px;align-items:stretch}
@@ -187,8 +183,6 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 @keyframes scribble{0%{transform:translateX(0) rotate(-9deg)}25%{transform:translateX(-1.6px) rotate(5deg)}50%{transform:translateX(1.6px) rotate(-7deg)}75%{transform:translateX(-1px) rotate(6deg)}100%{transform:translateX(0) rotate(-9deg)}}
 .ax-tool{position:absolute;top:-4px;right:-3px;transform-origin:60% 40%;animation:axturn 2.2s ease-in-out infinite}
 @keyframes axturn{0%,100%{transform:rotate(-16deg)}50%{transform:rotate(18deg)}}
-@media (prefers-reduced-motion:reduce){.phase-bot canvas,.ax-think i,.ax-plan,.ax-tool{animation:none!important}}
-@media (prefers-reduced-motion:reduce){.tb-dots i{animation:none}}
 /* tool leaderboard */
 .toolrow{display:flex;align-items:center;gap:12px;margin-bottom:9px;font-family:var(--mono)}
 .toolrow .tn{width:120px;flex:none;font-size:.74rem;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -209,7 +203,6 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 .sd-sub{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:12px}
 .sd-rows{display:flex;flex-direction:column;animation:sdfade .26s ease}
 @keyframes sdfade{from{transform:translateY(5px)}to{transform:none}}
-@media (prefers-reduced-motion:reduce){.sd-rows{animation:none}}
 .sd-empty{font-family:var(--sans);font-size:.82rem;line-height:1.5;color:var(--ink-faint);padding:20px;text-align:center;border:1px dashed var(--line);border-radius:12px}
 /* donut selection */
 .donut circle.donut-arc{transition:opacity .22s ease}

@@ -14,7 +14,7 @@
  * that only draw a static canvas return that canvas as before.
  * ========================================================================== */
 
-import { initReduced, isReduced, trackAnimation, applyReducedMotion } from "./motionRegistry";
+import { initReduced, isReduced, trackAnimation } from "./motionRegistry";
 
 /** A sprite FRAME is string[] (rows); a multi-frame sprite is string[][]. */
 export type Frame = string[];
@@ -23,20 +23,15 @@ export type Palette = Record<string, string>;
 /** A canvas element with an attached `_draw(frameIndex)` method. */
 export type SpriteCanvas = HTMLCanvasElement & { _draw(fi: number): void };
 
-/* Runtime reduced-motion (issue #38): seed the registry from the import-time
- * value, then keep it live via a SINGLE matchMedia "change" listener. On a flip
- * to reduce, applyReducedMotion drains + stops every loop registered below;
- * mounts after the flip gate on isReduced() so no new loop starts. Teardown
- * only — a flip back to motion does not auto-restart (issue scope). */
-const _reduceMql =
-  typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-initReduced(_reduceMql ? _reduceMql.matches : false);
-if (_reduceMql) {
-  const _onReduceChange = (e: MediaQueryListEvent) => applyReducedMotion(e.matches);
-  if (_reduceMql.addEventListener) _reduceMql.addEventListener("change", _onReduceChange);
-  else if ((_reduceMql as { addListener?: (cb: (e: MediaQueryListEvent) => void) => void }).addListener)
-    (_reduceMql as unknown as { addListener: (cb: (e: MediaQueryListEvent) => void) => void }).addListener(_onReduceChange);
-}
+/* PRODUCT DECISION — "MAXIMUM FUN" (supersedes the #38 runtime-reduced-motion gating):
+ * Token Torch's decorative pixel-art ALWAYS animates. It deliberately does NOT honor
+ * prefers-reduced-motion for these tiny, localized, idle/pointer-driven sprites — they are
+ * core to the arcade identity and carry no information, so freezing them only stripped the
+ * charm (owner call, S15). We seed the engine as "motion allowed" and never subscribe to a
+ * matchMedia change, so isReduced() stays false and every sprite loop runs. The registry /
+ * trackAnimation infra is retained (dormant) so a future OPT-IN "reduce animations" toggle
+ * could drive it — that is the accessible alternative if it's ever wanted. */
+initReduced(false);
 
 export function spriteCanvas(frames: Frame[], pal: Palette, scale = 4): SpriteCanvas {
   const w = Math.max(...frames.flat().map((r) => r.length));

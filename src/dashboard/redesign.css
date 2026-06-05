@@ -117,7 +117,6 @@ canvas.moon-cv{image-rendering:pixelated;vertical-align:-4px;margin-left:6px;ani
 .tile:hover .funnum{filter:saturate(1.15) drop-shadow(0 0 16px color-mix(in oklch,var(--amber) 45%,transparent))}
 .tile:hover .fn-lime{filter:saturate(1.15) drop-shadow(0 0 16px color-mix(in oklch,var(--lime) 45%,transparent))}
 .tile:hover #stSessionsIco canvas,.tile:hover #stProjectsIco canvas{animation-duration:.7s}
-@media (prefers-reduced-motion:reduce){.tile-ico canvas{animation:none!important}}
 .tile .ts{font-family:var(--mono);font-size:.64rem;color:var(--ink-faint);margin-top:4px}
 .tile.gauge{display:flex;align-items:center;gap:14px}
 .gauge svg{width:84px;height:84px;flex:none;overflow:visible}
@@ -177,7 +176,6 @@ canvas.crown{position:absolute;top:-18px;left:50%;image-rendering:pixelated;anim
 .bubble p{margin:0;font-size:.78rem;line-height:1.5;color:var(--ink)}.bubble p b{color:var(--cyan)}
 .pod.r1 .bubble p b{color:var(--magenta)}.pod.r3 .bubble p b{color:var(--lime)}
 .bubble .bs{font-family:var(--mono);font-size:.58rem;color:var(--ink-faint);margin-top:9px}
-@media (prefers-reduced-motion:reduce){.mv-evil,.mv-cool,.mv-nervous,.pod .block::after,.bignum,.ticker .track,canvas.crown,canvas.mascot,.brand .mk::after{animation:none!important}}
 
 /* ---------- date window control (option 3) ---------- */
 .windowbar{position:sticky;top:0;z-index:80;background:oklch(0.145 0.018 265 / .86);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
@@ -385,7 +383,6 @@ canvas.miniflame{image-rendering:pixelated}
 @keyframes scribble{0%{transform:translateX(0) rotate(-9deg)}25%{transform:translateX(-1.6px) rotate(5deg)}50%{transform:translateX(1.6px) rotate(-7deg)}75%{transform:translateX(-1px) rotate(6deg)}100%{transform:translateX(0) rotate(-9deg)}}
 .ax-tool{position:absolute;top:-4px;right:-3px;transform-origin:60% 40%;animation:axturn 2.2s ease-in-out infinite}
 @keyframes axturn{0%,100%{transform:rotate(-16deg)}50%{transform:rotate(18deg)}}
-@media (prefers-reduced-motion:reduce){.donut .phase-bot canvas,.ax-think i,.ax-plan,.ax-tool{animation:none!important}}
 .ac-detail{min-height:380px;display:flex;flex-direction:column}
 .ac-detail.ac-centered{justify-content:center}
 .ac-dhead{display:flex;align-items:center;gap:10px;font-family:var(--mono);margin-bottom:8px}
@@ -493,7 +490,6 @@ canvas.miniflame{image-rendering:pixelated}
 .bln::after{content:"";position:absolute;top:calc(100% + 3px);left:50%;width:1px;height:15px;background:var(--line);transform:translateX(-50%) rotate(4deg);transform-origin:top}
 .bln-name{font-family:var(--mono);font-weight:700;font-size:clamp(.6rem,calc(var(--bh) * 0.158),.92rem);line-height:1.06;letter-spacing:-.02em;color:var(--bc);text-shadow:0 0 11px color-mix(in oklch,var(--bc) 50%,transparent);max-width:90%;padding:0 4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:normal;overflow-wrap:break-word;text-wrap:balance}
 @keyframes bfloat{0%,100%{transform:translateY(0) rotate(-2.5deg)}50%{transform:translateY(-9px) rotate(2.5deg)}}
-@media (prefers-reduced-motion:reduce){.balloon{animation:none}}
 .bln-tip{position:fixed;z-index:60;pointer-events:none;max-width:248px;background:var(--raised);border:1px solid var(--cyan);border-radius:11px;padding:11px 14px;font-family:var(--mono);font-size:.7rem;line-height:1.6;color:var(--ink-dim);opacity:0;transition:opacity .12s;box-shadow:0 14px 36px rgba(0,0,0,.55)}
 .bln-tip b{color:var(--ink);font-size:.74rem}
 .bln-tip .bt-n{display:inline-block;margin-top:5px;color:var(--cyan)}
@@ -535,7 +531,6 @@ canvas.miniflame{image-rendering:pixelated}
 @keyframes clktorch{0%,100%{transform:scale(1) rotate(0);filter:drop-shadow(0 0 5px oklch(0.83 0.155 78 / .6))}50%{transform:scale(1.14) rotate(22deg);filter:drop-shadow(0 0 13px oklch(0.86 0.18 70 / .95))}}
 .clk-set{animation:clkset 3.4s ease-in-out infinite}
 @keyframes clkset{0%{transform:translateY(-4px) rotate(0)}25%{transform:translateY(-2px) rotate(-16deg)}50%{transform:translateY(2px) rotate(16deg)}75%{transform:translateY(6px) rotate(-10deg)}100%{transform:translateY(11px) rotate(0)}}
-@media (prefers-reduced-motion:reduce){.when-note .owl-cv,.punch .pcell.peak,.clk-star,.clk-rise,.clk-torch,.clk-set{animation:none}}
 .heatgrid{display:grid;gap:8px;font-family:var(--mono);margin-top:14px}
 .heatgrid .hcorner{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:flex-end;padding:0 0 6px 2px}
 .heatgrid .hch{display:flex;flex-direction:column;align-items:center;gap:5px;padding:4px;color:var(--ink-dim)}
@@ -567,8 +562,6 @@ canvas.miniflame{image-rendering:pixelated}
 .max-orbit{position:absolute;left:50%;top:42%;width:0;height:0;transform:translate(-50%,-50%);animation:maxorbit 9s linear infinite;pointer-events:none;z-index:1}
 @keyframes maxorbit{to{transform:translate(-50%,-50%) rotate(360deg)}}
 .max-orbit-c{position:absolute;left:0;top:0;font-family:var(--mono);font-weight:700;font-size:.48rem;color:oklch(0.86 0.18 95 / .9);text-shadow:0 0 5px oklch(0.86 0.18 95 / .8)}
-@media (prefers-reduced-motion:reduce){.max-orbit,.eff-code{animation:none!important}}
-@media (prefers-reduced-motion:reduce){.effbot,.eff-zzz{animation:none!important}.effbot.eff-low{transform:rotate(-30deg)}}
 .heatgrid .hcr{font-size:.82rem;font-weight:700;color:var(--mc);display:flex;align-items:center;justify-content:flex-end;padding-right:12px;text-align:right;text-shadow:0 0 14px color-mix(in oklch,var(--mc) 40%,transparent)}
 .heatgrid .hc{border-radius:13px;padding:20px 12px;text-align:center;border:1px solid var(--line);position:relative;transition:transform .15s}
 .heatgrid .hc:hover{transform:scale(1.04)}
@@ -579,7 +572,6 @@ canvas.miniflame{image-rendering:pixelated}
 .heatgrid .hc .hotflame{position:absolute;top:-10px;right:-6px;font-size:1.1rem;filter:drop-shadow(0 0 8px var(--amber));animation:hotbob 1.4s ease-in-out infinite}
 @keyframes hotbob{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-3px) rotate(6deg)}}
 .heatgrid .hc.empty{background:repeating-linear-gradient(45deg,transparent,transparent 5px,oklch(0.3 0.02 265 / .25) 5px,oklch(0.3 0.02 265 / .25) 6px);color:var(--ink-faint);display:grid;place-items:center}
-@media (prefers-reduced-motion:reduce){.heatgrid .hc .hotflame{animation:none}}
 /* time-split legend */
 .timesplit-leg{display:flex;flex-wrap:wrap;gap:16px;margin-top:11px;font-family:var(--mono);font-size:.72rem;color:var(--ink-dim)}
 .timesplit-leg span{display:inline-flex;align-items:center;gap:7px}
