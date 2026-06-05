@@ -56,4 +56,26 @@ check("empty/whitespace input yields md null, no offending", () => {
   assert.deepEqual(r.offending, []);
 });
 
+// #27 PCN inline tags on the agent path: a CORRECTLY-tagged note is accepted with the tags
+// STRIPPED from the shipped md (display never shows tag debris).
+check("a correctly-tagged agent note is accepted and the tags are stripped from the shipped md", () => {
+  const f = dashboardFixture();
+  f.distributions.model_mix = { "claude-opus-4-8": 80, "claude-opus-4-7": 20 };
+  const md = "**Mix 🎮**\n- Opus 4.8 ran 80% [[mm:claude-opus-4-8=80]], Opus 4.7 20% [[mm:claude-opus-4-7=20]].";
+  const r = acceptAgentInsights(md, f);
+  assert.ok(r.md && !/\[\[mm:/.test(r.md), `tags must be stripped from shipped md, got ${JSON.stringify(r.md)}`);
+  assert.ok(/Opus 4\.8 ran 80%/.test(r.md ?? ""), "visible prose preserved");
+});
+
+// A SWAPPED PCN tag is rejected FAIL-CLOSED even though the prose order is fine (the tag is the
+// order-independent binding). md null + the tag surfaced on taggedOffending for an honest log.
+check("a swapped PCN tag is REJECTED fail-closed (md null + taggedOffending surfaced)", () => {
+  const f = dashboardFixture();
+  f.distributions.model_mix = { "claude-opus-4-8": 80, "claude-opus-4-7": 20 };
+  const md = "**Mix**\n- Opus 4.7 dominated [[mm:claude-opus-4-7=80]]."; // 80 is 4.8's share
+  const r = acceptAgentInsights(md, f);
+  assert.equal(r.md, null, "a swapped tag must not ship");
+  assert.ok(r.taggedOffending.length > 0, `expected taggedOffending, got ${JSON.stringify(r.taggedOffending)}`);
+});
+
 console.log(`\n${passed} insights-agent checks passed`);

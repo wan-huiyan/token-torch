@@ -189,6 +189,14 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
       if (!matchesAllowed(bound, ownShare, "percent") && matchesAllowed(bound, others, "percent"))
         offending.push(m[0].trim());
     }
+    // NOTE (#27): the SYMMETRIC number-before-label case ("74.35% went to Opus 4.7") is
+    // deliberately NOT covered by a reverse heuristic — "<num>%, <NextLabel>" in list prose
+    // is structurally ambiguous (the number belongs to the PRECEDING label), so a reverse
+    // bind false-positives on legitimate "Opus 4.8 70%, Opus 4.7 25%" mixes. The order-
+    // independent guarantee is owned by the inline PCN tags (validateTaggedInsights), which
+    // bind (entity,value) regardless of word order. Prose binding stays forward-only + fail-open,
+    // so an UNTAGGED number-before-label swap is a documented residual (#47); the tags close it
+    // when emitted (forcing a tag on every % would break the zero-tags fail-open passthrough).
   }
 
   // --- #37 vacuity: forbidden superlative / comparison / causal phrases (HARD RULES 2 & 5). ---
@@ -200,4 +208,59 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
   const claims = [...new Set([...flat.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
 
   return { ok: offending.length === 0 && claims.length === 0, offending, claims };
+}
+
+/* ============================================================================
+ * #27 — PCN inline-tag protocol for model_mix (the full, order-independent mechanism
+ * that the #24 prose-binding heuristic only partially covers).
+ *
+ * The agent / LLM may append an inline binding tag [[mm:<model_mix-id>=<value>]] right
+ * after a version's share in the prose. validateTaggedInsights runs at GENERATE-TIME and is
+ * FAIL-CLOSED on the tags: every PRESENT tag's (entity, value) must bind to a real model_mix
+ * entry within tolerance — a swap (the value is another version's share), a fabricated value,
+ * an unknown id, or a malformed [[mm: attempt all fail. It ALWAYS returns the prose with every
+ * tag stripped, so neither the display nor the downstream VERIFY-time validateInsightNumbers
+ * (which stays FAIL-OPEN) ever sees tag debris. ZERO tags ⇒ fail-OPEN passthrough, so template
+ * / legacy / untagged agent prose is wholly unaffected by the protocol.
+ * ========================================================================== */
+
+export interface TaggedValidationResult {
+  /** true iff no present tag is malformed or misattributed. ZERO tags ⇒ true (fail-open). */
+  ok: boolean;
+  /** the prose with EVERY [[mm:…]] tag removed — what ships/displays and what the fail-open
+   *  validateInsightNumbers re-checks at verify time. */
+  stripped: string;
+  /** tag tokens that failed the (entity,value) binding, kind-tagged for an honest log/retry. */
+  taggedOffending: string[];
+}
+
+/** Well-formed model_mix binding tag: [[mm:<model_mix-id>=<value>]]. */
+const MM_TAG_RE = /\[\[mm:\s*([a-z0-9-]+)\s*=\s*(\d+(?:\.\d+)?|\.\d+)\s*\]\]/gi;
+/** Any [[mm: … ]] occurrence (well-formed or not), with one optional leading space — for
+ *  stripping. A bare "[[mm:" count vs. parsed-tag count surfaces malformed attempts. */
+const MM_STRIP_RE = /\s?\[\[mm:[^\]]*\]\]/gi;
+
+/** GENERATE-TIME, FAIL-CLOSED PCN tag check (#27). See the block comment above. */
+export function validateTaggedInsights(prose: string, data: DashboardData): TaggedValidationResult {
+  const attempts = (prose.match(/\[\[mm:/gi) || []).length;
+  if (attempts === 0) return { ok: true, stripped: prose, taggedOffending: [] };
+  const stripped = prose.replace(MM_STRIP_RE, "").trimEnd();
+  const taggedOffending: string[] = [];
+  const tags = [...prose.matchAll(MM_TAG_RE)];
+  // A present-but-garbled binding must not silently pass (a [[mm: that did not parse).
+  if (tags.length < attempts) taggedOffending.push("malformed model_mix tag — expected [[mm:<model-id>=<value>]]");
+  const mix = data.distributions.model_mix;
+  for (const m of tags) {
+    const id = m[1].toLowerCase();
+    const value = parseFloat(m[2]);
+    const share = mix[id];
+    if (share == null) {
+      taggedOffending.push(`${m[0]} (unknown model id "${id}")`);
+      continue;
+    }
+    // share is a PERCENT; reuse the whitelist tolerance for the (entity,value) bind.
+    if (!matchesAllowed(value, [{ value: share, unit: "percent" }], "percent"))
+      taggedOffending.push(`${m[0]} (claims ${value}% but ${id}'s share is ${share}%)`);
+  }
+  return { ok: taggedOffending.length === 0, stripped, taggedOffending };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { DashboardData } from "../../src/types";
-import { allowedNumbers, validateInsightNumbers } from "./insightsValidate";
+import { allowedNumbers, validateInsightNumbers, validateTaggedInsights } from "./insightsValidate";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => {
@@ -349,5 +349,76 @@ check("the same $50 dollar token still validates (match within dollar unit)", ()
   assert.deepEqual(r.offending, []);
   assert.equal(r.ok, true);
 });
+
+// ============================================================================
+// #27 — PCN inline-tag protocol for model_mix. The agent/LLM may append an inline
+// binding tag [[mm:<model_mix-id>=<value>]] after a version share. validateTaggedInsights
+// FAIL-CLOSES on any present tag whose (entity,value) does not match model_mix, and STRIPS
+// every tag before display. ZERO tags = fail-OPEN passthrough (template/legacy untagged prose
+// survives the protocol). Generate-time only; verify-time validateInsightNumbers runs on the
+// stripped (tag-free) text and stays fail-open.
+// ============================================================================
+
+check("tagged: zero tags is a fail-OPEN passthrough (stripped === raw)", () => {
+  const raw = "Model mix: Opus 4.8 70%, Opus 4.7 25%, Sonnet 4.6 5%.";
+  const r = validateTaggedInsights(raw, mixFixture());
+  assert.equal(r.ok, true);
+  assert.equal(r.stripped, raw, "untagged prose passes through unchanged");
+  assert.deepEqual(r.taggedOffending, []);
+});
+
+check("tagged: correct tags pass and are STRIPPED from the output", () => {
+  const raw = "Opus 4.8 took 70% [[mm:claude-opus-4-8=70]], Opus 4.7 at 25% [[mm:claude-opus-4-7=25]].";
+  const r = validateTaggedInsights(raw, mixFixture());
+  assert.equal(r.ok, true, JSON.stringify(r.taggedOffending));
+  assert.ok(!/\[\[mm:/.test(r.stripped), "no tag debris remains in the stripped output");
+  assert.ok(/Opus 4\.8 took 70%/.test(r.stripped), "visible prose preserved");
+  assert.ok(/Opus 4\.7 at 25%/.test(r.stripped), "visible prose preserved (2)");
+});
+
+check("tagged: a SWAPPED tag (value is ANOTHER version's share) FAILS CLOSED", () => {
+  // opus-4-7's real share is 25; the tag claims 70 (opus-4-8's share) — a misattribution.
+  const r = validateTaggedInsights("Opus 4.7 dominated [[mm:claude-opus-4-7=70]].", mixFixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.taggedOffending.some((o) => /claude-opus-4-7/.test(o)), JSON.stringify(r.taggedOffending));
+});
+
+check("tagged: a tag value matching NO share fails closed", () => {
+  const r = validateTaggedInsights("Opus 4.8 [[mm:claude-opus-4-8=42]].", mixFixture());
+  assert.equal(r.ok, false);
+});
+
+check("tagged: an unknown entity id fails closed", () => {
+  const r = validateTaggedInsights("Ghost [[mm:claude-ghost-9-9=70]].", mixFixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.taggedOffending.some((o) => /ghost/i.test(o)), JSON.stringify(r.taggedOffending));
+});
+
+check("tagged: a malformed [[mm: attempt fails closed (no silent pass)", () => {
+  const r = validateTaggedInsights("Opus 4.8 [[mm:claude-opus-4-8]] is the mix.", mixFixture()); // no =value
+  assert.equal(r.ok, false, "a [[mm: attempt that does not parse must not silently pass");
+});
+
+check("tagged: multiple tags, one swapped → fails, the good one is not offending, all stripped", () => {
+  const raw = "Opus 4.8 70% [[mm:claude-opus-4-8=70]], Opus 4.7 70% [[mm:claude-opus-4-7=70]].";
+  const r = validateTaggedInsights(raw, mixFixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.taggedOffending.some((o) => /claude-opus-4-7/.test(o)));
+  assert.ok(!r.taggedOffending.some((o) => /claude-opus-4-8=70\b/.test(o)), "the correct 4-8 tag is not offending");
+  assert.ok(!/\[\[mm:/.test(r.stripped));
+});
+
+check("tagged: a tag value within rounding tolerance of the share passes", () => {
+  const f = fixture();
+  f.distributions.model_mix = { "claude-opus-4-7": 74.35, "claude-opus-4-8": 20.53, "claude-sonnet-4-6": 5.12 };
+  const r = validateTaggedInsights("Opus 4.7 74.35% [[mm:claude-opus-4-7=74.35]].", f);
+  assert.equal(r.ok, true, JSON.stringify(r.taggedOffending));
+});
+
+// NOTE (#27): the symmetric number-before-label case ("74% went to Opus 4.7") is owned by the
+// inline PCN tags above (validateTaggedInsights — order-independent), NOT by a reverse prose
+// heuristic: "<num>%, <NextLabel>" in list prose is structurally ambiguous (the number belongs
+// to the PRECEDING label), so a reverse bind false-positives on legit "Opus 4.8 70%, Opus 4.7
+// 25%" mixes (caught in TDD). Prose binding stays forward-only + fail-open; tags do the rest.
 
 console.log(`\n${passed} insights-validate checks passed`);

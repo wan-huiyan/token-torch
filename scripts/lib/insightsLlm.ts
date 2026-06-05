@@ -18,7 +18,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { DashboardData } from "../../src/types";
-import { validateInsightNumbers } from "./insightsValidate";
+import { validateInsightNumbers, validateTaggedInsights } from "./insightsValidate";
 import { buildContextBlock } from "./insightsPrompt";
 
 // buildContextBlock + INSIGHTS_PROMPT_VERSION moved to the KEY-FREE ./insightsPrompt module
@@ -73,8 +73,21 @@ export async function buildInsightsLLM(data: DashboardData): Promise<string | nu
         correction = "Your previous response was empty. Write the insights note now, following all rules.";
         continue;
       }
-      const { ok, offending, claims } = validateInsightNumbers(prose, data);
-      if (ok) return prose.trim();
+      // #27 — fail-CLOSED PCN tag check FIRST, on the TAGGED prose; strip tags before the rest.
+      // A misattributed tag is a BINDING error (the number IS present, just bound to the wrong
+      // model) — a kind-specific correction so the retry actually self-corrects (it previously
+      // got the wrong "number not present" message and just fell back to templates).
+      const tag = validateTaggedInsights(prose, data);
+      if (!tag.ok) {
+        correction =
+          `Your previous note had misattributed model_mix tag(s): ${tag.taggedOffending.join("; ")}. ` +
+          `Each [[mm:<model-id>=<value>]] tag's value MUST equal that model's actual share from the data ` +
+          `above (or drop the tag). Rewrite the note.`;
+        continue;
+      }
+      // fail-OPEN number/claim check on the STRIPPED text — what ships + what --verify re-checks.
+      const { ok, offending, claims } = validateInsightNumbers(tag.stripped, data);
+      if (ok) return tag.stripped.trim();
       const parts = [
         offending.length
           ? `number(s) not present in the ground-truth data: ${offending.join(", ")} — use ONLY the citable numbers above, do not invent or recompute any figure`

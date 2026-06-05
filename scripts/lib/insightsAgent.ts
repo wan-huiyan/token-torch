@@ -20,31 +20,41 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import type { DashboardData } from "../../src/types";
-import { validateInsightNumbers } from "./insightsValidate";
+import { validateInsightNumbers, validateTaggedInsights } from "./insightsValidate";
 
 export interface AgentInsightsDecision {
-  /** the shippable, trimmed markdown, or null to fall back (template). */
+  /** the shippable, trimmed markdown (with any PCN tags STRIPPED), or null to fall back. */
   md: string | null;
   /** numeric tokens that failed the no-fabrication gate (for an honest log). */
   offending: string[];
   /** forbidden superlative/comparison/causal phrases that failed the vacuity gate (#37). */
   claims: string[];
+  /** PCN model_mix tags that failed the fail-closed (entity,value) binding (#27). */
+  taggedOffending: string[];
 }
 
-/** PURE: decide whether the raw agent markdown may ship as insights_source:"agent". */
+/** PURE: decide whether the raw agent markdown may ship as insights_source:"agent".
+ *  Two gates: (1) the fail-CLOSED PCN tag check (#27) on the TAGGED text — a misattributed/
+ *  fabricated/malformed [[mm:id=value]] tag rejects; (2) the existing fail-OPEN number/claim
+ *  check on the STRIPPED text. The shipped md is always tag-free. */
 export function acceptAgentInsights(raw: string | null, data: DashboardData): AgentInsightsDecision {
-  if (raw == null || !raw.trim()) return { md: null, offending: [], claims: [] };
-  const { ok, offending, claims } = validateInsightNumbers(raw, data);
-  return ok ? { md: raw.trim(), offending: [], claims: [] } : { md: null, offending, claims };
+  if (raw == null || !raw.trim()) return { md: null, offending: [], claims: [], taggedOffending: [] };
+  const tag = validateTaggedInsights(raw, data);
+  if (!tag.ok) return { md: null, offending: [], claims: [], taggedOffending: tag.taggedOffending };
+  const { ok, offending, claims } = validateInsightNumbers(tag.stripped, data);
+  return ok
+    ? { md: tag.stripped.trim(), offending: [], claims: [], taggedOffending: [] }
+    : { md: null, offending, claims, taggedOffending: [] };
 }
 
 /** I/O wrapper: read insights.local.md, gate it, log loudly on rejection, return md or null. */
 export function loadAgentInsights(path: string, data: DashboardData): string | null {
   if (!existsSync(path)) return null;
-  const { md, offending, claims } = acceptAgentInsights(readFileSync(path, "utf8"), data);
-  if (md == null && (offending.length || claims.length)) {
+  const { md, offending, claims, taggedOffending } = acceptAgentInsights(readFileSync(path, "utf8"), data);
+  if (md == null && (offending.length || claims.length || taggedOffending.length)) {
     const reasons = [
       offending.length ? `number(s) absent from the dashboard aggregates: ${offending.join(", ")}` : "",
+      taggedOffending.length ? `misattributed model_mix tag(s): ${taggedOffending.join("; ")}` : "",
       claims.length ? `forbidden superlative/comparison/causal phrase(s): ${claims.join(", ")}` : "",
     ].filter(Boolean).join("; ");
     console.warn(

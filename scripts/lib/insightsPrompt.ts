@@ -18,7 +18,7 @@ import { prettyModelId } from "../../src/shared/models";
 /** BUMP on any prompt / rule / model-mix-format change. The insights cache key
  *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
  *  this a prompt edit would serve STALE cached insights until the aggregates change. */
-export const INSIGHTS_PROMPT_VERSION = "2026-06-05-vacuity-claims-unit-aware";
+export const INSIGHTS_PROMPT_VERSION = "2026-06-05-pcn-model-mix-tags";
 
 /** The stable, cacheable context block: the grounding facts + the rules. Built
  *  once per call; byte-identical across the regen retries so the cache holds. */
@@ -45,6 +45,7 @@ export function buildContextBlock(data: DashboardData): string {
     `- Projects (top 5 by cost):`,
     projectLines,
     `- Model mix (% of assistant messages): ${Object.entries(data.distributions.model_mix).map(([m, p]) => `${prettyModelId(m)} ${p}%`).join(", ")}`,
+    `- Model-mix binding tags — append the matching tag right after each version's % you cite, verbatim: ${Object.entries(data.distributions.model_mix).map(([m, p]) => `${prettyModelId(m)} → [[mm:${m}=${p}]]`).join(", ")}`,
     `- Full set of citable numbers: ${allowed}`,
     "",
     "HARD RULES:",
@@ -57,8 +58,9 @@ export function buildContextBlock(data: DashboardData): string {
     "5. No performance superlatives, model comparisons, or causal language — the validator now REJECTS words like 'best / worst / better / worse / faster / slower / superior / outperforms / record-breaking / blowout' and 'because / caused / due to / thanks to'. Factual cost/size rankings ('priciest', 'biggest', 'most', 'top', 'led the mix') ARE fine — they describe the data. Describe shares and rankings, never value judgments or causes.",
     "6. Do NOT write any date, or any number (including incidental counts like 'top 3 projects') that is not in the citable list above — the validator rejects unlisted numbers and the UI already supplies the date. Spell out small structural counts as words if needed.",
     "7. When citing the model mix, name each model VERSION explicitly as given (e.g. 'Opus 4.7', 'Opus 4.8', 'Sonnet 4.6'). NEVER merge two versions into one ambiguous phrase like 'Opus X% and Y%' — keep each version's share attached to its version label.",
+    "8. MODEL-MIX BINDING TAGS: immediately after each model-version % you cite, append its inline tag from the 'Model-mix binding tags' line above, exactly — e.g. \"Opus 4.7 took 74.35% [[mm:claude-opus-4-7=74.35]]\". The tag's id and value MUST match the listing. These tags are STRIPPED before the note is displayed (the reader never sees them); they let the generator confirm each share is bound to the correct version regardless of word order, and a misattributed tag is REJECTED. Omit tags only if you cite no model-mix percentages.",
     "",
-    "FORMAT: markdown — a bold header line (a fun arcade-y title is welcome), then 2–4 '- ' bullets, each of which MAY open with a single emoji accent. Keep it under 90 words. Numbers and model-version labels stay exact.",
+    "FORMAT: markdown — a bold header line (a fun arcade-y title is welcome), then 2–4 '- ' bullets, each of which MAY open with a single emoji accent. Keep it under 90 words. Numbers and model-version labels stay exact; the [[mm:…]] binding tags are stripped before display.",
   ].join("\n");
 }
 
