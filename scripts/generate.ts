@@ -17,13 +17,14 @@
  *   CORPUS_DIR=/path npm run generate
  * ========================================================================== */
 
-import { mkdirSync, writeFileSync, statSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, statSync, readFileSync, readdirSync, unlinkSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadCorpus, type SessionGroup } from "./lib/corpus";
 import { ingestSessions, type IngestResult } from "./lib/ingest";
+import { orphanSessionIds } from "./lib/orphans";
 import { mapDashboard, type SubagentTimingCheck } from "./lib/mapDashboard";
 import { INTERACTIVE_TOOLS } from "./lib/mapSessionDetail";
 import type { DashboardData, SessionDetailData } from "../src/types";
@@ -45,6 +46,7 @@ const INSIGHTS_MODEL = "claude-opus-4-8";
 const INSIGHTS_REQUEST_PATH = join(ROOT, "insights-request.md");
 const AGENT_INSIGHTS_PATH = join(ROOT, "insights.local.md");
 const VERIFY = process.argv.includes("--verify");
+const PRUNE_ORPHANS = process.argv.includes("--prune-orphans"); // #22 — opt-in destructive prune
 
 const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
 
@@ -464,6 +466,29 @@ async function main(): Promise<void> {
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);
+
+  // #22 — surface (and, with --prune-orphans, remove) per-session JSONs left behind by sessions
+  // that dropped out of the corpus (their transcript was deleted/rotated out of ~/.claude/projects).
+  // The orphan set is MONOTONIC (a deleted transcript never returns), and `generate` always does a
+  // FULL scan (ingestSessions default dir), so removal is safe. Destructive removal is opt-in;
+  // public/data is gitignored + regenerated, so this is purely local tidy.
+  {
+    const sessionsDir = join(OUT_DIR, "sessions");
+    const orphans = existsSync(sessionsDir)
+      ? orphanSessionIds(readdirSync(sessionsDir), new Set(details.map((d) => d.id)))
+      : [];
+    if (orphans.length) {
+      if (PRUNE_ORPHANS) {
+        for (const id of orphans) unlinkSync(join(sessionsDir, `${id}.json`));
+        console.log(`Pruned ${orphans.length} orphan session file(s) (sessions no longer in the corpus).`);
+      } else {
+        console.log(
+          `Note: ${orphans.length} orphan session file(s) in public/data/sessions (sessions no longer in the ` +
+            `corpus — transcripts deleted/rotated). Run \`pnpm generate -- --prune-orphans\` to remove them.`,
+        );
+      }
+    }
+  }
 
   console.log(
     `Ingested: ${ingest.kept}/${ingest.discovered} sessions (floored ${ingest.droppedFloor}: <10 msgs or no usage; ` +
