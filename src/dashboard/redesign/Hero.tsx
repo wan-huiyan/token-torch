@@ -88,8 +88,8 @@ export function Hero({ data }: { data: DashboardData }) {
           {bigDollars}
           <span className="cents">.{cents}</span>
         </div>
-        <div className="burned-cap">
-          <Est /> · on a plan, so $ is just FYI
+        <div className="burned-cap" data-tour="cost-est">
+          <Est /> <a href="#/about" className="estlink">how?</a> · on a plan, so $ is just FYI
           {showFloored && (
             <>
               {" "}· incl. <b>{num(shortSessions)}</b> short sessions rolled into the total (≈{usd(flooredUsd)})
@@ -98,7 +98,7 @@ export function Hero({ data }: { data: DashboardData }) {
         </div>
 
         {/* confidence split bar — the headline honesty feature */}
-        <div className="conf">
+        <div className="conf" data-tour="coverage-flag">
           <div className="conf-k">How much of this spend is fully measured?</div>
           <div className="conf-bar">
             <i className="hi" style={hiStyle} />
@@ -170,7 +170,7 @@ export function Hero({ data }: { data: DashboardData }) {
           Only <b>{pct(aPct, 0)}</b> of the clock was real compute — the rest is you away or asleep (costs nothing).
         </div>
 
-        <div className="saved">
+        <div className="saved" data-tour="time-saved">
           <span className="sic" aria-hidden="true">
             <Sprite mount={(h) => mountIcon(h, "bolt", 2)} />
           </span>
