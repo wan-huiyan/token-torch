@@ -26,7 +26,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: "coverage",
     selector: '[data-tour="coverage-flag"]',
     title: "Honest coverage",
-    body: "This split shows how much spend is fully measured vs. main-loop-only (subagents not attributed). Nothing is silently dropped, and every figure carries a data-tier badge for its sourcing.",
+    body: "This split shows how much spend is fully measured vs. main-loop-only (subagents not attributed). Nothing is silently dropped — and each session in the table view is tagged with how its numbers were sourced (its data tier).",
   },
   {
     id: "timesaved",

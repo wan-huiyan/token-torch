@@ -11,13 +11,19 @@ export function TourOverlay() {
   const [done, setDone] = useState(() => isTourSeen());
   const [rect, setRect] = useState<DOMRect | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<Element | null>(null);
 
   function finish() {
     markTourSeen();
     setDone(true);
+    // restore focus to whatever the user had before the tour grabbed it (a11y).
+    const o = openerRef.current as HTMLElement | null;
+    if (o && document.contains(o)) o.focus?.();
   }
 
-  // Resolve the next PRESENT anchor at/after index `i`; position the popover near it.
+  // Resolve the next PRESENT anchor at/after index `i`; position the popover near it,
+  // and KEEP it aligned as a smooth scroll settles / the window resizes (position:fixed
+  // popover + async scrollIntoView would otherwise leave it stranded off below-fold anchors).
   useEffect(() => {
     if (done) return;
     let idx = i;
@@ -32,14 +38,43 @@ export function TourOverlay() {
     }
     const el = document.querySelector(TOUR_STEPS[idx].selector);
     if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
-    setRect(el.getBoundingClientRect());
-    popRef.current?.focus();
+    const reposition = () => setRect(el.getBoundingClientRect());
+    // Always "auto" (synchronous): a programmatic SMOOTH scrollIntoView is unreliable (it
+    // no-ops in automated/headless contexts, leaving a position:fixed popover stranded off
+    // a below-fold anchor). Instant scroll is motion-free + reliable for a utility tour.
+    el.scrollIntoView({ block: "start", behavior: "auto" });
+    reposition(); // synchronous scroll done → this rect is final
+    // belt-and-suspenders: re-align after any late layout shift (sprites/count-ups settling).
+    const t1 = window.setTimeout(reposition, 250);
+    const t2 = window.setTimeout(reposition, 600);
+    window.addEventListener("scroll", reposition, { passive: true });
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("scroll", reposition);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [i, done]);
+
+  // Focus the popover ONCE per step, after it has actually mounted (rect drives mount, so
+  // a step-0 fresh visit — where the first render returns null — still gets focus). Keyed on
+  // [i, done] (NOT rect) so a scroll-driven reposition doesn't yank focus back from a button.
+  useEffect(() => {
+    if (done) return;
+    const raf = requestAnimationFrame(() => {
+      if (!openerRef.current) openerRef.current = document.activeElement;
+      popRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [i, done]);
 
   if (done || !rect) return null;
   const step = TOUR_STEPS[i];
-  const top = Math.min(rect.bottom + 10, window.innerHeight - 200);
+  // Position just below the anchor's TOP region (cap the reference at 64px tall) so a TALL
+  // anchor like the sessions list doesn't push the popover to its far-off bottom edge.
+  const refY = rect.top + Math.min(rect.height, 64);
+  const top = Math.max(12, Math.min(refY + 10, window.innerHeight - 200));
   const left = Math.min(Math.max(rect.left, 12), window.innerWidth - 332);
   const next = () => (i + 1 >= TOUR_STEPS.length ? finish() : setI(i + 1));
   const back = () => i > 0 && setI(i - 1);

@@ -9,7 +9,7 @@ Token Torch reads **only** `~/.claude/projects/` — no usage-tracking corpus st
    #   — or `pnpm dev` for the no-build dev server (port 5273)
 
 A brand-new user is all `jsonl` data-tier (no `enriched` usage-tracking overlay) and still sees a
-fully-populated, honestly-labelled dashboard immediately — every figure carries its data-tier badge.
+fully-populated, honestly-labelled dashboard immediately — each session row in the table view shows its data tier.
 
 ## Optional: AI insights with no API key
 `pnpm generate` emits `insights-request.md`. Paste it to your own coding agent (Claude Code / Codex /

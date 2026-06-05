@@ -32,7 +32,8 @@ export function AboutPage({ onBack }: { onBack: () => void }) {
         <h4>We never silently drop data</h4>
         <p>
           Low-signal sessions are <em>floored</em>, not deleted: their count and rolled-in spend are surfaced on the
-          dashboard, and a data-tier badge marks how each figure was sourced. Model and effort views are{" "}
+          dashboard, and each session row in the table view is tagged with how its numbers were sourced (its data
+          tier). Model and effort views are{" "}
           <em>breakdowns, not comparisons</em> — they are confounded by time and task mix, so we describe what differed
           and never crown a winner.
         </p>
