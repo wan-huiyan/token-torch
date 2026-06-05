@@ -647,3 +647,22 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 .bw-win-bar > i { width: 100%; display: block; background: var(--amber); }
 .bw-win-lab { font-size: .6rem; color: var(--ink-faint); margin-top: 3px; }
 .bw-note { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); margin-top: 6px; }
+
+/* ---- Plan 7 onboarding tour (#16) — non-blocking popover + estimate→about link ---- */
+.tour-scrim { position: fixed; inset: 0; z-index: 9999; }
+.tour-pop {
+  background: var(--panel); border: 1px solid var(--cyan); border-radius: 10px;
+  padding: 14px 16px; box-shadow: 0 10px 44px rgba(0,0,0,.55);
+  font-family: var(--mono); color: var(--ink); animation: tourPop .18s ease-out;
+}
+.tour-pop.noanim { animation: none; }
+.tour-pop.noanim * { transition: none !important; animation: none !important; }
+@keyframes tourPop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tour-title { font-weight: 700; font-size: .92rem; color: var(--cyan); margin-bottom: 6px; }
+.tour-body { font-size: .78rem; line-height: 1.5; color: var(--ink-dim); }
+.tour-ctl { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tour-ctl button { font-family: inherit; font-size: .72rem; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.tour-ctl button.tour-next { background: var(--cyan); color: var(--bg); border-color: transparent; font-weight: 700; }
+.tour-ctl button.tour-skip { margin-right: auto; opacity: .7; }
+.tour-dots { font-size: .7rem; color: var(--ink-faint); }
+.estlink { color: var(--cyan); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

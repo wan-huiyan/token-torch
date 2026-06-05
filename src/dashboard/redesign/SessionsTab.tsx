@@ -448,7 +448,7 @@ export function SessionsTab(_props: { data: DashboardData; onOpenSession: (id: s
         </span>
       </div>
 
-      <div id="sessBody">
+      <div id="sessBody" data-tour="session-card">
         {filtered.length === 0 ? (
           <div
             style={{

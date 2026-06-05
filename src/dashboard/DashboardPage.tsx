@@ -20,6 +20,7 @@ import { TimelineTab } from "./redesign/TimelineTab";
 import { DistributionsTab } from "./redesign/DistributionsTab";
 import { ModelEffortTab } from "./redesign/ModelEffortTab";
 import { RecsTab } from "./redesign/RecsTab";
+import { TourOverlay } from "./TourOverlay";
 import "./redesign.css";
 
 export type DashTab = "sessions" | "timeline" | "distributions" | "breakdown" | "recs";
@@ -72,6 +73,7 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
             role="tab"
             aria-selected={tab === t.id}
             className={tab === t.id ? "on" : ""}
+            data-tour={t.id === "breakdown" ? "breakdown-link" : undefined}
             onClick={() => setTab(t.id)}
           >
             {t.label}
@@ -98,6 +100,8 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
           SCHEMA <b>{data.meta.schema_version}</b> · GENERATED <b>{fmtStamp(data.meta.generated_at)}</b>
         </div>
       </footer>
+
+      <TourOverlay />
     </div>
   );
 }
