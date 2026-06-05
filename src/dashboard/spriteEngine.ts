@@ -14,6 +14,8 @@
  * that only draw a static canvas return that canvas as before.
  * ========================================================================== */
 
+import { initReduced, isReduced, trackAnimation, applyReducedMotion } from "./motionRegistry";
+
 /** A sprite FRAME is string[] (rows); a multi-frame sprite is string[][]. */
 export type Frame = string[];
 /** Each char in a frame maps to a colour; any char absent (e.g. ".") is transparent. */
@@ -21,7 +23,20 @@ export type Palette = Record<string, string>;
 /** A canvas element with an attached `_draw(frameIndex)` method. */
 export type SpriteCanvas = HTMLCanvasElement & { _draw(fi: number): void };
 
-const reduce = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false;
+/* Runtime reduced-motion (issue #38): seed the registry from the import-time
+ * value, then keep it live via a SINGLE matchMedia "change" listener. On a flip
+ * to reduce, applyReducedMotion drains + stops every loop registered below;
+ * mounts after the flip gate on isReduced() so no new loop starts. Teardown
+ * only — a flip back to motion does not auto-restart (issue scope). */
+const _reduceMql =
+  typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+initReduced(_reduceMql ? _reduceMql.matches : false);
+if (_reduceMql) {
+  const _onReduceChange = (e: MediaQueryListEvent) => applyReducedMotion(e.matches);
+  if (_reduceMql.addEventListener) _reduceMql.addEventListener("change", _onReduceChange);
+  else if ((_reduceMql as { addListener?: (cb: (e: MediaQueryListEvent) => void) => void }).addListener)
+    (_reduceMql as unknown as { addListener: (cb: (e: MediaQueryListEvent) => void) => void }).addListener(_onReduceChange);
+}
 
 export function spriteCanvas(frames: Frame[], pal: Palette, scale = 4): SpriteCanvas {
   const w = Math.max(...frames.flat().map((r) => r.length));
@@ -80,7 +95,8 @@ export function mountMascot(host: HTMLElement, scale = 4): () => void {
   bot.addEventListener("click", onClick);
   let live = true;
   let t: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     const loop = () => {
       t = window.setTimeout(() => {
         if (!live) return;
@@ -101,10 +117,16 @@ export function mountMascot(host: HTMLElement, scale = 4): () => void {
       }, 1400 + Math.random() * 2600);
     };
     loop();
+    untrack = trackAnimation(() => {
+      live = false;
+      if (t) window.clearTimeout(t);
+      bot._draw(0);
+    });
   }
   return () => {
     live = false;
     if (t) window.clearTimeout(t);
+    untrack?.();
     bot.removeEventListener("click", onClick);
     bot.remove();
   };
@@ -113,8 +135,10 @@ export function mountMascot(host: HTMLElement, scale = 4): () => void {
 /* ---- flame (burn-tier) ---- */
 // shared ticker: one timer animates every registered flame (scales to hundreds cheaply)
 const _flames: { cv: SpriteCanvas; i: number }[] = [];
-if (!reduce) {
-  window.setInterval(() => {
+let _flameIv: number | undefined;
+function _startFlameTicker(): void {
+  if (_flameIv !== undefined) return; // already running
+  _flameIv = window.setInterval(() => {
     for (let k = _flames.length - 1; k >= 0; k--) {
       const a = _flames[k];
       if (!a.cv.isConnected) {
@@ -124,8 +148,23 @@ if (!reduce) {
       a.cv._draw(++a.i);
     }
   }, 120);
+  // Issue #38: this one module-lifetime ticker drives ALL flames + ~70 mini-flames
+  // (no per-mount cleanup of its own), so register its stop so a runtime flip-to-
+  // reduce halts it. After the flip, mounts gate on isReduced() and skip _regFlame.
+  trackAnimation(() => {
+    if (_flameIv !== undefined) {
+      window.clearInterval(_flameIv);
+      _flameIv = undefined;
+    }
+  });
 }
 function _regFlame(cv: SpriteCanvas): void {
+  // (Re)start the shared ticker so flames that mount after a runtime motion-RESTORE
+  // animate again and the loop's self-pruning resumes — otherwise a dead ticker would
+  // let _flames accumulate frozen, detached canvases (issue #38 review-panel catch).
+  // Idempotent via the _flameIv guard; call sites already gate on !isReduced(), so this
+  // is the single lazy entry point for the ticker lifecycle (no module-load start).
+  _startFlameTicker();
   _flames.push({ cv, i: Math.floor(Math.random() * 3) });
 }
 export const FLAME: Frame[] = [
@@ -145,7 +184,7 @@ export function mountFlame(host: HTMLElement, scale = 4, tier?: FlameTier): () =
   const fl = spriteCanvas(FLAME, (tier && FLAME_TINT[tier]) || PAL.flame, scale);
   fl.className = "flame-cv";
   host.appendChild(fl);
-  if (!reduce) _regFlame(fl);
+  if (!isReduced()) _regFlame(fl);
   return () => {
     fl.remove();
   };
@@ -159,7 +198,7 @@ export function miniFlames(host: HTMLElement, n: number, tier?: FlameTier, scale
     fl.className = "miniflame";
     host.appendChild(fl);
     cvs.push(fl);
-    if (!reduce) _regFlame(fl);
+    if (!isReduced()) _regFlame(fl);
   }
   return () => {
     for (const fl of cvs) fl.remove();
@@ -195,7 +234,8 @@ export function mountTerminal(host: HTMLElement, scale = 2): () => void {
   host.appendChild(cv);
   let live = true;
   let t: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     const loop = () => {
       t = window.setTimeout(() => {
         if (!live) return;
@@ -207,10 +247,16 @@ export function mountTerminal(host: HTMLElement, scale = 2): () => void {
       }, 520);
     };
     loop();
+    untrack = trackAnimation(() => {
+      live = false;
+      if (t) window.clearTimeout(t);
+      cv._draw(0);
+    });
   }
   return () => {
     live = false;
     if (t) window.clearTimeout(t);
+    untrack?.();
     cv.remove();
   };
 }
@@ -224,7 +270,8 @@ export function mountFamily(host: HTMLElement, scale = 2): () => void {
   host.appendChild(cv);
   let live = true;
   let t: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     const loop = () => {
       t = window.setTimeout(() => {
         if (!live) return;
@@ -236,10 +283,16 @@ export function mountFamily(host: HTMLElement, scale = 2): () => void {
       }, 1600 + Math.random() * 2400);
     };
     loop();
+    untrack = trackAnimation(() => {
+      live = false;
+      if (t) window.clearTimeout(t);
+      cv._draw(0);
+    });
   }
   return () => {
     live = false;
     if (t) window.clearTimeout(t);
+    untrack?.();
     cv.remove();
   };
 }
@@ -259,6 +312,7 @@ export function mountEffortBot(host: HTMLElement, kind: EffortKind, scale = 3): 
   const timers: number[] = [];
   const nodes: Element[] = [];
   let live = true;
+  let untrack: (() => void) | undefined;
   function one(cls: string, sleeping?: boolean): SpriteCanvas {
     const cv = spriteCanvas([BOT.open, BOT.blink], PAL.bot, scale);
     cv.className = "effbot " + cls;
@@ -268,7 +322,7 @@ export function mountEffortBot(host: HTMLElement, kind: EffortKind, scale = 3): 
       cv._draw(1);
       return cv;
     }
-    if (!reduce) {
+    if (!isReduced()) {
       const loop = () => {
         if (!cv.isConnected || !live) return;
         timers.push(
@@ -289,7 +343,7 @@ export function mountEffortBot(host: HTMLElement, kind: EffortKind, scale = 3): 
     return cv;
   }
   function addCode(n: number, color: string): void {
-    if (reduce) return;
+    if (isReduced()) return;
     const ch = "01{}<>;/=()+".split("");
     for (let i = 0; i < n; i++) {
       const s = document.createElement("span");
@@ -302,7 +356,7 @@ export function mountEffortBot(host: HTMLElement, kind: EffortKind, scale = 3): 
     }
   }
   function addOrbit(): void {
-    if (reduce) return;
+    if (isReduced()) return;
     const wrap = document.createElement("span");
     wrap.className = "max-orbit";
     const ch = "01{}<>;/=".split("");
@@ -337,10 +391,17 @@ export function mountEffortBot(host: HTMLElement, kind: EffortKind, scale = 3): 
     if (kind === "high") addCode(3, "#b6ff3d");
     else if (kind === "ultra-high") addCode(9, "#b6ff3d");
   }
+  if (!isReduced()) {
+    untrack = trackAnimation(() => {
+      live = false;
+      for (const id of timers) window.clearTimeout(id);
+    });
+  }
   return () => {
     live = false;
     for (const id of timers) window.clearTimeout(id);
     for (const node of nodes) node.remove();
+    untrack?.();
     if (kind === "team") host.classList.remove("eff-team");
   };
 }
@@ -354,7 +415,8 @@ export function mountBird(host: HTMLElement, scale = 4): () => void {
   host.appendChild(cv);
   let live = true;
   let t: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     const loop = () => {
       t = window.setTimeout(() => {
         if (!live) return;
@@ -366,10 +428,16 @@ export function mountBird(host: HTMLElement, scale = 4): () => void {
       }, 1400 + Math.random() * 2200);
     };
     loop();
+    untrack = trackAnimation(() => {
+      live = false;
+      if (t) window.clearTimeout(t);
+      cv._draw(0);
+    });
   }
   return () => {
     live = false;
     if (t) window.clearTimeout(t);
+    untrack?.();
     cv.remove();
   };
 }
@@ -380,7 +448,8 @@ export function mountOwl(host: HTMLElement, scale = 4): () => void {
   host.appendChild(cv);
   let live = true;
   let t: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     const loop = () => {
       t = window.setTimeout(() => {
         if (!live) return;
@@ -392,10 +461,16 @@ export function mountOwl(host: HTMLElement, scale = 4): () => void {
       }, 2200 + Math.random() * 3000);
     };
     loop();
+    untrack = trackAnimation(() => {
+      live = false;
+      if (t) window.clearTimeout(t);
+      cv._draw(0);
+    });
   }
   return () => {
     live = false;
     if (t) window.clearTimeout(t);
+    untrack?.();
     cv.remove();
   };
 }
@@ -451,12 +526,20 @@ export function mountPodiumBot(host: HTMLElement, kind: PodiumKind, scale = 4): 
   cv.className = "pbot " + m.cls;
   host.appendChild(cv);
   let iv: number | undefined;
-  if (!reduce) {
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
     let i = 0;
     iv = window.setInterval(() => cv._draw(++i), 420);
+    untrack = trackAnimation(() => {
+      if (iv) {
+        window.clearInterval(iv);
+        iv = undefined;
+      }
+    });
   }
   return () => {
     if (iv) window.clearInterval(iv);
+    untrack?.();
     cv.remove();
   };
 }
@@ -487,7 +570,7 @@ export function mountIcon(host: HTMLElement, name: IconName, scale = 3): SpriteC
 // bounded celebratory sparkle/coin spawner around a host (pops + fades upward)
 /** Starts an interval spawning fading confetti sprites. Cleanup: stop the spawner interval. */
 export function confettiAround(host: HTMLElement, opts?: { kinds?: IconName[]; every?: number }): () => void {
-  if (reduce) return () => {};
+  if (isReduced()) return () => {};
   const o = opts || {};
   const kinds: IconName[] = o.kinds || ["star", "coin", "star"];
   const iv = window.setInterval(() => {
@@ -517,8 +600,10 @@ export function confettiAround(host: HTMLElement, opts?: { kinds?: IconName[]; e
     ).onfinish = done;
     window.setTimeout(done, 2100);
   }, o.every || 900);
+  const untrack = trackAnimation(() => window.clearInterval(iv));
   return () => {
     window.clearInterval(iv);
+    untrack();
   };
 }
 
@@ -526,7 +611,7 @@ export function confettiAround(host: HTMLElement, opts?: { kinds?: IconName[]; e
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; grav: number; tw: number };
 /** Mounts a fullscreen fairy-dust canvas reacting to pointer move/down. Cleanup: drop listeners, cancel rAF, remove canvas. */
 export function initFairyDust(colors?: string[]): () => void {
-  if (reduce) return () => {};
+  if (isReduced()) return () => {};
   const cols = colors || ["#2ee6ff", "#b6ff3d", "#ff5ad0", "#ffe14d", "#ffffff"];
   const cv = document.createElement("canvas");
   cv.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9999";
@@ -619,9 +704,14 @@ export function initFairyDust(colors?: string[]): () => void {
     raf = requestAnimationFrame(tick);
   }
   raf = requestAnimationFrame(tick);
+  const untrack = trackAnimation(() => {
+    stopped = true;
+    cancelAnimationFrame(raf);
+  });
   return () => {
     stopped = true;
     cancelAnimationFrame(raf);
+    untrack();
     removeEventListener("resize", rs);
     removeEventListener("pointermove", onMove);
     removeEventListener("pointerdown", onDown);
@@ -632,7 +722,7 @@ export function initFairyDust(colors?: string[]): () => void {
 /* ---- rising-coins burner (money burning) ---- */
 /** Starts an interval spawning rising coin sprites. Cleanup: stop the spawner interval. */
 export function mountCoinBurst(host: HTMLElement): () => void {
-  if (reduce) return () => {};
+  if (isReduced()) return () => {};
   const iv = window.setInterval(() => {
     if (document.hidden || host.childElementCount > 14) return;
     const c = spriteCanvas([COIN], PAL.coin, 3);
@@ -653,15 +743,17 @@ export function mountCoinBurst(host: HTMLElement): () => void {
       c.remove();
     }, 1900);
   }, 900);
+  const untrack = trackAnimation(() => window.clearInterval(iv));
   return () => {
     window.clearInterval(iv);
+    untrack();
   };
 }
 
 /* ---- rising flame embers (money burning, with fire) ---- */
 /** Starts an interval spawning rising animated ember sprites. Cleanup: stop the spawner interval. */
 export function mountEmberRise(host: HTMLElement, tier?: FlameTier): () => void {
-  if (reduce) return () => {};
+  if (isReduced()) return () => {};
   const pal = (tier && FLAME_TINT[tier]) || FLAME_TINT.inferno;
   const iv = window.setInterval(() => {
     if (document.hidden || host.childElementCount > 14) return;
@@ -685,8 +777,14 @@ export function mountEmberRise(host: HTMLElement, tier?: FlameTier): () => void 
     ).onfinish = done;
     window.setTimeout(done, 3000);
   }, 520);
+  // NOTE (dead export): each spawned ember runs its OWN inner setInterval (innerIv, 110ms)
+  // cleared only by its own done(); this registry stop clears just the outer spawner. If
+  // mountEmberRise is ever wired to a live host, track + clear the inner intervals too so a
+  // flip-to-reduce halts them instantly (issue #38 review-panel note).
+  const untrack = trackAnimation(() => window.clearInterval(iv));
   return () => {
     window.clearInterval(iv);
+    untrack();
   };
 }
 

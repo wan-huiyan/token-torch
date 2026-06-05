@@ -567,7 +567,7 @@ canvas.miniflame{image-rendering:pixelated}
 .max-orbit{position:absolute;left:50%;top:42%;width:0;height:0;transform:translate(-50%,-50%);animation:maxorbit 9s linear infinite;pointer-events:none;z-index:1}
 @keyframes maxorbit{to{transform:translate(-50%,-50%) rotate(360deg)}}
 .max-orbit-c{position:absolute;left:0;top:0;font-family:var(--mono);font-weight:700;font-size:.48rem;color:oklch(0.86 0.18 95 / .9);text-shadow:0 0 5px oklch(0.86 0.18 95 / .8)}
-@media (prefers-reduced-motion:reduce){.max-orbit{animation:none}}
+@media (prefers-reduced-motion:reduce){.max-orbit,.eff-code{animation:none!important}}
 @media (prefers-reduced-motion:reduce){.effbot,.eff-zzz{animation:none!important}.effbot.eff-low{transform:rotate(-30deg)}}
 .heatgrid .hcr{font-size:.82rem;font-weight:700;color:var(--mc);display:flex;align-items:center;justify-content:flex-end;padding-right:12px;text-align:right;text-shadow:0 0 14px color-mix(in oklch,var(--mc) 40%,transparent)}
 .heatgrid .hc{border-radius:13px;padding:20px 12px;text-align:center;border:1px solid var(--line);position:relative;transition:transform .15s}
