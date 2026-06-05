@@ -18,7 +18,7 @@ import { prettyModelId } from "../../src/shared/models";
 /** BUMP on any prompt / rule / model-mix-format change. The insights cache key
  *  (insightsHash) is otherwise keyed only on the data numbers + model, so without
  *  this a prompt edit would serve STALE cached insights until the aggregates change. */
-export const INSIGHTS_PROMPT_VERSION = "2026-06-03-arcade-playful-voice-2";
+export const INSIGHTS_PROMPT_VERSION = "2026-06-05-vacuity-claims-unit-aware";
 
 /** The stable, cacheable context block: the grounding facts + the rules. Built
  *  once per call; byte-identical across the regen retries so the cache holds. */
@@ -54,7 +54,7 @@ export function buildContextBlock(data: DashboardData): string {
       ? "3. small_n is TRUE: there are too few sessions for trend claims. Write an empty-state note only — no week-over-week or trend language."
       : "3. You may describe the current window, but make no causal claims the data can't support.",
     "4. Costs are ESTIMATES from per-model list rates (the billing dashboard is authoritative). Say 'estimated' where natural.",
-    "5. No superlatives or causal language ('because', 'caused', 'best') beyond what the numbers plainly show.",
+    "5. No performance superlatives, model comparisons, or causal language — the validator now REJECTS words like 'best / worst / better / worse / faster / slower / superior / outperforms / record-breaking / blowout' and 'because / caused / due to / thanks to'. Factual cost/size rankings ('priciest', 'biggest', 'most', 'top', 'led the mix') ARE fine — they describe the data. Describe shares and rankings, never value judgments or causes.",
     "6. Do NOT write any date, or any number (including incidental counts like 'top 3 projects') that is not in the citable list above — the validator rejects unlisted numbers and the UI already supplies the date. Spell out small structural counts as words if needed.",
     "7. When citing the model mix, name each model VERSION explicitly as given (e.g. 'Opus 4.7', 'Opus 4.8', 'Sonnet 4.6'). NEVER merge two versions into one ambiguous phrase like 'Opus X% and Y%' — keep each version's share attached to its version label.",
     "",

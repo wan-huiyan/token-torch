@@ -27,23 +27,30 @@ export interface AgentInsightsDecision {
   md: string | null;
   /** numeric tokens that failed the no-fabrication gate (for an honest log). */
   offending: string[];
+  /** forbidden superlative/comparison/causal phrases that failed the vacuity gate (#37). */
+  claims: string[];
 }
 
 /** PURE: decide whether the raw agent markdown may ship as insights_source:"agent". */
 export function acceptAgentInsights(raw: string | null, data: DashboardData): AgentInsightsDecision {
-  if (raw == null || !raw.trim()) return { md: null, offending: [] };
-  const { ok, offending } = validateInsightNumbers(raw, data);
-  return ok ? { md: raw.trim(), offending: [] } : { md: null, offending };
+  if (raw == null || !raw.trim()) return { md: null, offending: [], claims: [] };
+  const { ok, offending, claims } = validateInsightNumbers(raw, data);
+  return ok ? { md: raw.trim(), offending: [], claims: [] } : { md: null, offending, claims };
 }
 
 /** I/O wrapper: read insights.local.md, gate it, log loudly on rejection, return md or null. */
 export function loadAgentInsights(path: string, data: DashboardData): string | null {
   if (!existsSync(path)) return null;
-  const { md, offending } = acceptAgentInsights(readFileSync(path, "utf8"), data);
-  if (md == null && offending.length)
+  const { md, offending, claims } = acceptAgentInsights(readFileSync(path, "utf8"), data);
+  if (md == null && (offending.length || claims.length)) {
+    const reasons = [
+      offending.length ? `number(s) absent from the dashboard aggregates: ${offending.join(", ")}` : "",
+      claims.length ? `forbidden superlative/comparison/causal phrase(s): ${claims.join(", ")}` : "",
+    ].filter(Boolean).join("; ");
     console.warn(
-      `⚠ ${path} cites number(s) absent from the dashboard aggregates: ${offending.join(", ")} — ` +
-        `discarding (using template insights). Re-run your agent on the current data.`,
+      `⚠ ${path} contains ${reasons} — discarding (using template insights). ` +
+        `Re-run your agent on the current data, citing only the listed numbers and no value judgments.`,
     );
+  }
   return md;
 }

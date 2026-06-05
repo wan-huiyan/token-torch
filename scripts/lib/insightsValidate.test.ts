@@ -262,4 +262,92 @@ check("a non-share % adjacent to a model label is NOT flagged (binding owns swap
   assert.equal(r.ok, true);
 });
 
+// ============================================================================
+// #37 Part A — qualitative-claim detection (vacuity). HARD RULES 2 & 5 forbid model
+// performance COMPARISON + SUPERLATIVES + causal language; validateInsightNumbers must
+// ENFORCE them server-side, not merely request them in the prompt. A fabricated
+// superlative (even WITH a valid number) must NOT wear the "agent"/"llm" trust badge.
+// Offenders surface on a NEW `claims` field (numbers stay on `offending`).
+// ============================================================================
+
+check("a hype superlative WITH a valid number is rejected (claims, not numbers)", () => {
+  // $12,679.22 is whitelisted (cost_usd) so the NUMBER passes; the offense is "Best…ever"
+  // + "record-breaking" + "blowout" — proving the naive '≥1 number' guard wouldn't catch it.
+  const r = validateInsightNumbers("**Best week ever — a record-breaking $12,679.22 blowout!**", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.claims.length > 0, `expected a qualitative-claim flag, got ${JSON.stringify(r.claims)}`);
+  assert.deepEqual(r.offending, [], "the number $12,679.22 is whitelisted — the offense is the superlative, not the number");
+});
+
+check("a model performance comparison is rejected (Rule 2: breakdown not comparison)", () => {
+  const r = validateInsightNumbers("Opus 4.8 was faster and better than Opus 4.7 this week.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.claims.some((c) => /faster|better/i.test(c)), `expected faster/better flagged, got ${JSON.stringify(r.claims)}`);
+});
+
+check("causal language is rejected (Rule 5: no 'because'/'caused')", () => {
+  const r = validateInsightNumbers("Spend climbed because of heavy subagent fan-out.", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.claims.some((c) => /because/i.test(c)), `expected because flagged, got ${JSON.stringify(r.claims)}`);
+});
+
+check("a number-free superlative is rejected (the original vacuity case)", () => {
+  const r = validateInsightNumbers("**Best week ever!**", fixture());
+  assert.equal(r.ok, false);
+  assert.ok(r.claims.length > 0);
+});
+
+// Markdown emphasis must NOT smuggle a superlative past the gate. `_` is a \w char, so
+// \b has no boundary at `_best`; `**` splitting a word (`b**est**`) breaks contiguity. The
+// claims scan must run on the markdown-stripped text (the #24 binding pass already does).
+check("an underscore/split-emphasis superlative is still rejected (markdown can't evade the gate)", () => {
+  for (const md of ["_best_ week ever!", "__worst__ ever", "this run was _faster_ than before", "a _record-breaking_ blowout", "b**est** week"]) {
+    const r = validateInsightNumbers(md, fixture());
+    assert.equal(r.ok, false, `emphasis must not evade: ${JSON.stringify(md)}`);
+    assert.ok(r.claims.length > 0, `expected a claim flagged for ${JSON.stringify(md)}, got ${JSON.stringify(r.claims)}`);
+  }
+});
+
+// FALSE-POSITIVE GUARDS — factual cost/size rankings + arcade voice MUST pass. The live
+// template writes "your priciest project"; insights.ts writes "sessions on record"; the
+// live arcade voice writes "Opus 4.8 led the mix". None are forbidden value judgments.
+check("a factual cost/size ranking (priciest/biggest/most) is NOT flagged", () => {
+  const r = validateInsightNumbers("🔥 alpha is the priciest project — the biggest at 63% of spend, burning the most coins.", fixture());
+  assert.deepEqual(r.claims, [], `factual rankings must pass, got ${JSON.stringify(r.claims)}`);
+  assert.equal(r.ok, true);
+});
+check("playful arcade voice with 'led the mix' / 'on record' is NOT flagged (template-safe)", () => {
+  const r = validateInsightNumbers("Opus 4.8 led the mix; only 597 sessions on record, with 100h of active time.", mixFixture());
+  assert.deepEqual(r.claims, []);
+  assert.equal(r.ok, true);
+});
+
+// ============================================================================
+// #37 Part B — unit-aware matchesAllowed. The whitelist co-mingles dollars, percents,
+// counts, minutes & tokens as bare numbers, so a fabricated PERCENT used to match a
+// DOLLAR value of the same magnitude (cross-unit membership). A $-token must match only
+// dollar-unit values; a %-token only percent-unit values; a bare token stays permissive.
+// ============================================================================
+
+function unitFixture(): DashboardData {
+  const f = fixture();
+  // alpha gets a $50/session figure → a DOLLAR-unit allowed value of 50; NO percent equals 50.
+  f.projects = [{ name: "alpha", cost_usd: 8000, sessions: 160, active_min: 3000, cost_share: 0.63, cost_per_session: 50 }];
+  return f;
+}
+
+check("a fabricated 50% is rejected even though $50 is a whitelisted dollar value (unit-aware)", () => {
+  const f = unitFixture();
+  assert.ok(allowedNumbers(f).includes(50), "precondition: 50 IS in the allow-set, but as a DOLLAR value");
+  const r = validateInsightNumbers("Cache efficiency hit 50%.", f);
+  assert.equal(r.ok, false, "50% must NOT match the $50 dollar value (cross-unit membership was the bug)");
+  assert.ok(r.offending.includes("50%"), `expected 50% offending, got ${JSON.stringify(r.offending)}`);
+});
+
+check("the same $50 dollar token still validates (match within dollar unit)", () => {
+  const r = validateInsightNumbers("That's about $50 per session.", unitFixture());
+  assert.deepEqual(r.offending, []);
+  assert.equal(r.ok, true);
+});
+
 console.log(`\n${passed} insights-validate checks passed`);
