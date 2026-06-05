@@ -17,8 +17,21 @@ import { prettyModelId } from "../../src/shared/models";
 
 export interface ValidationResult {
   ok: boolean;
-  /** numeric tokens found in the prose that match no allowed value. */
+  /** numeric tokens found in the prose that match no allowed value (UNIT-AWARE: a $-token
+   *  matches only dollar values, a %-token only percent values; #37). */
   offending: string[];
+  /** forbidden superlative / performance-comparison / causal phrases — qualitative claims
+   *  the data cannot support (HARD RULES 2 & 5; #37 vacuity fix). Distinct from numbers. */
+  claims: string[];
+}
+
+/** A unit dimension for an allowed number, so cross-unit collisions (a fabricated 50%
+ *  matching a $50 aggregate) can't pass. "bare" = count / minutes / hours / tokens, or a
+ *  dollar written without a sign — genuinely ambiguous, so it matches permissively. */
+type Unit = "dollar" | "percent" | "bare";
+interface AllowedNumber {
+  value: number;
+  unit: Unit;
 }
 
 /** Relative tolerance for matching a prose number to an allowed value.
@@ -37,49 +50,78 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
  *  the bare "5" coincides with a whitelisted aggregate (issue #9). */
 const SCALE: Record<string, number> = { k: 1e3, m: 1e6, b: 1e9 };
 
-/** The whitelist of numbers the LLM may cite. Dashboard-level aggregates ONLY. */
-export function allowedNumbers(data: DashboardData): number[] {
+/** #37 vacuity gate: superlatives / performance comparisons / causal claims the usage data
+ *  CANNOT support (HARD RULES 2 & 5). A note that wears the "agent"/"llm" trust badge must
+ *  not assert value judgments — even WITH a valid number ("Best week ever — $12,679.22!").
+ *
+ *  DELIBERATELY high-precision — only value-judgment / performance / causal vocabulary that
+ *  has NO factual-ranking use over this cost/size/share/count data. EXCLUDED on purpose
+ *  (the templates + live arcade voice use these legitimately): priciest / pricey / biggest /
+ *  largest / smallest / most / least / top / highest / lowest / more / fewer / led / leader /
+ *  leading / dominant, and BARE "record" (insights.ts writes "sessions on record"). The cost
+ *  comparatives "cheaper/cheapest" are also excluded (factual cost use) — a residual "cheaper
+ *  than" model comparison is a documented fail-OPEN, consistent with the PCN binding posture
+ *  (#27). Matches are whole-word (\b) or explicit phrases; case-insensitive. */
+const CLAIM_RE =
+  /\b(?:best|worst|better|worse|fastest|faster|slowest|slower|superior|inferior|smartest|smarter|dumbest|dumber|outperform(?:s|ed)?|beats|blowout)\b|\brecord[ -](?:breaking|shattering)\b|\bbecause\b|\bcaus(?:ed|es|ing)\b|\bdue to\b|\bthanks to\b/gi;
+
+/** The whitelist of citable numbers, TAGGED with a unit dimension (single source of truth).
+ *  Dashboard-level aggregates ONLY (never sessions[], which would make the check vacuous). */
+function allowedNumbersTyped(data: DashboardData): AllowedNumber[] {
   const t = data.totals;
-  const out: number[] = [
-    t.cost_usd,
-    t.cost_by_fidelity.high,
-    t.cost_by_fidelity.main_loop,
-    t.active_minutes,
-    t.active_hours,
-    t.idle_minutes,
-    t.idle_hours,
-    t.sessions,
-    t.subagent_dispatches,
-    t.cost_per_active_min,
-    t.avg_cache_hit_pct,
-    t.tokens.input_fresh,
-    t.tokens.cache_read,
-    t.tokens.output,
-    t.time_saved_min,
-    t.time_saved_hours,
-    data.meta.session_count,
-    data.meta.project_count,
+  const D = (value: number): AllowedNumber => ({ value, unit: "dollar" });
+  const P = (value: number): AllowedNumber => ({ value, unit: "percent" });
+  const N = (value: number): AllowedNumber => ({ value, unit: "bare" }); // count / minutes / hours / tokens
+  const out: AllowedNumber[] = [
+    D(t.cost_usd),
+    D(t.cost_by_fidelity.high),
+    D(t.cost_by_fidelity.main_loop),
+    N(t.active_minutes),
+    N(t.active_hours),
+    N(t.idle_minutes),
+    N(t.idle_hours),
+    N(t.sessions),
+    N(t.subagent_dispatches),
+    D(t.cost_per_active_min),
+    P(t.avg_cache_hit_pct),
+    N(t.tokens.input_fresh),
+    N(t.tokens.cache_read),
+    N(t.tokens.output),
+    N(t.time_saved_min),
+    N(t.time_saved_hours),
+    N(data.meta.session_count),
+    N(data.meta.project_count),
   ];
-  if (t.floored_usd != null) out.push(t.floored_usd);
-  if (t.complete_spend_usd != null) out.push(t.complete_spend_usd);
+  if (t.floored_usd != null) out.push(D(t.floored_usd));
+  if (t.complete_spend_usd != null) out.push(D(t.complete_spend_usd));
   for (const p of data.projects) {
-    out.push(p.cost_usd, p.sessions, p.active_min, p.cost_per_session, p.cost_share * 100);
+    out.push(D(p.cost_usd), N(p.sessions), N(p.active_min), D(p.cost_per_session), P(p.cost_share * 100));
   }
   if (data.meta.floor) {
     const f = data.meta.floor;
-    out.push(f.discovered, f.kept, f.dropped, f.dropped_with_usage, f.dropped_with_usage_usd);
+    out.push(N(f.discovered), N(f.kept), N(f.dropped), N(f.dropped_with_usage), D(f.dropped_with_usage_usd));
   }
-  for (const v of Object.values(data.distributions.model_mix)) out.push(v);
+  for (const v of Object.values(data.distributions.model_mix)) out.push(P(v));
   return out;
 }
 
-/** Does `value` match any allowed number, as exact, integer-rounded, or within REL_TOL? */
-function matchesAllowed(value: number, allowed: number[]): boolean {
+/** The whitelist as a flat number[] — for the prompt/cache consumers that just list values.
+ *  (Validation uses the typed version above for unit-aware matching.) Dashboard aggregates ONLY. */
+export function allowedNumbers(data: DashboardData): number[] {
+  return allowedNumbersTyped(data).map((a) => a.value);
+}
+
+/** Does `value` (of `unit`) match any allowed number, as exact, integer-rounded, or within
+ *  REL_TOL? UNIT-AWARE: a $-token matches only dollar values and a %-token only percent values
+ *  (so a fabricated 50% can't pass on a $50 aggregate); a bare token matches any unit
+ *  (its true unit is ambiguous, so we don't over-reject — fail-open). */
+function matchesAllowed(value: number, allowed: AllowedNumber[], unit: Unit): boolean {
   for (const a of allowed) {
-    if (value === a) return true;
-    if (Math.round(value) === Math.round(a)) return true;
-    const denom = Math.max(Math.abs(a), 1);
-    if (Math.abs(value - a) / denom <= REL_TOL) return true;
+    if (unit !== "bare" && a.unit !== unit) continue; // unit gate for $/% tokens
+    if (value === a.value) return true;
+    if (Math.round(value) === Math.round(a.value)) return true;
+    const denom = Math.max(Math.abs(a.value), 1);
+    if (Math.abs(value - a.value) / denom <= REL_TOL) return true;
   }
   return false;
 }
@@ -90,22 +132,26 @@ function matchesAllowed(value: number, allowed: number[]): boolean {
  *  an allowed value — they usually do (sessions/counts) — but are NOT auto-exempted
  *  except for 4-digit years. */
 export function validateInsightNumbers(prose: string, data: DashboardData): ValidationResult {
-  const allowed = allowedNumbers(data);
+  const allowed = allowedNumbersTyped(data);
   const offending: string[] = [];
-  // matches: $1,234.56 | 1,234 | 95.0% | .5% | $5M | 80B — captures the numeric core
-  // (with commas/decimals/leading-dot) plus an optional k/K/M/B scale suffix (group 2).
-  const tokenRe = /\$?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)([kKmMbB])?\s?%?/g;
+  // matches: $1,234.56 | 1,234 | 95.0% | .5% | $5M | 80B — captures (1) an optional "$"
+  // prefix, (2) the numeric core (commas/decimals/leading-dot), (3) an optional k/K/M/B
+  // scale suffix, (4) an optional "%" suffix. Groups 1 & 4 give the token its UNIT (#37).
+  const tokenRe = /(\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)([kKmMbB])?\s?(%)?/g;
   for (const m of prose.matchAll(tokenRe)) {
-    const raw = m[1];
+    const raw = m[2];
     // A bare 4-digit year (date label) is not a metric claim.
     if (YEAR_RE.test(raw.replace(/[,.].*$/, ""))) continue;
     let value = parseFloat(raw.replace(/,/g, ""));
     if (Number.isNaN(value)) continue;
     // Scale a trailing k/M/B suffix into the value before whitelist-matching, so a
     // fabricated scaled figure can't pass on a coincidental mantissa collision (#9).
-    const suffix = m[2];
+    const suffix = m[3];
     if (suffix) value *= SCALE[suffix.toLowerCase()];
-    if (!matchesAllowed(value, allowed)) offending.push(m[0].trim());
+    // Unit from the surface markers: "%" => percent, else "$" => dollar, else bare. A $/%
+    // token must match a value of the SAME unit (#37); a bare token matches any unit.
+    const unit: Unit = m[4] === "%" ? "percent" : m[1] === "$" ? "dollar" : "bare";
+    if (!matchesAllowed(value, allowed, unit)) offending.push(m[0].trim());
   }
 
   // --- #24 PCN first cut: catch a SWAPPED model_mix version share. ---
@@ -137,9 +183,21 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
     for (const m of flat.matchAll(bindRe)) {
       const bound = parseFloat(m[1]);
       if (Number.isNaN(bound)) continue;
-      if (!matchesAllowed(bound, [share]) && matchesAllowed(bound, otherShares)) offending.push(m[0].trim());
+      // bound and the shares are all PERCENTs (bindRe requires a trailing %).
+      const ownShare: AllowedNumber[] = [{ value: share, unit: "percent" }];
+      const others: AllowedNumber[] = otherShares.map((v) => ({ value: v, unit: "percent" }));
+      if (!matchesAllowed(bound, ownShare, "percent") && matchesAllowed(bound, others, "percent"))
+        offending.push(m[0].trim());
     }
   }
 
-  return { ok: offending.length === 0, offending };
+  // --- #37 vacuity: forbidden superlative / comparison / causal phrases (HARD RULES 2 & 5). ---
+  // The number scan owns fabrication; this owns value judgments the data cannot support —
+  // even a superlative WITH a valid number ("Best week ever — $12,679.22!") is rejected.
+  // Scan the markdown-stripped `flat` (computed above), NOT raw prose: `_` is a \w char so
+  // `\b` has no boundary at `_best_`, and `**` splitting a word (`b**est**`) breaks the match —
+  // either would let an emphasised superlative evade the gate (review-panel catch).
+  const claims = [...new Set([...flat.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
+
+  return { ok: offending.length === 0 && claims.length === 0, offending, claims };
 }

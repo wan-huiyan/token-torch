@@ -23,6 +23,16 @@ check("a fabricated number is REJECTED (md null + offending surfaced) — never 
   assert.ok(r.offending.includes("$99,999"), `expected $99,999 offending, got ${JSON.stringify(r.offending)}`);
 });
 
+// #37 SYMMETRY: a fabricated SUPERLATIVE with NO bad number (the vacuity case) must also be
+// rejected on the agent path — md null + the offending phrase surfaced on `claims`, so the
+// loud log can explain WHY it fell back to template (not a silent drop).
+check("a fabricated superlative is REJECTED with the claim surfaced (symmetric with LLM path)", () => {
+  const md = "**Best week ever — a record-breaking blowout!**";
+  const r = acceptAgentInsights(md, dashboardFixture());
+  assert.equal(r.md, null, "a superlative note must NOT ship as agent");
+  assert.ok(r.claims.length > 0, `expected the superlative surfaced in claims, got ${JSON.stringify(r.claims)}`);
+});
+
 // A swapped model-version share (both shares are valid values) is caught by the #24 binding pass.
 check("a swapped model_mix attribution is REJECTED (binding, not membership)", () => {
   const f = dashboardFixture();

@@ -352,12 +352,17 @@ function verify(
   // (agent- or LLM-written). main() already guarantees only validated prose reaches here,
   // so this is the independent re-check that fails the build if that guarantee ever breaks.
   if ((dashboard.insights_source === "llm" || dashboard.insights_source === "agent") && dashboard.insights_md) {
-    const { ok, offending } = validateInsightNumbers(dashboard.insights_md, dashboard);
-    if (!ok)
+    const { ok, offending, claims } = validateInsightNumbers(dashboard.insights_md, dashboard);
+    if (!ok) {
+      const why = [
+        offending.length ? `number(s) absent from the dashboard aggregates: ${offending.join(", ")}` : "",
+        claims.length ? `forbidden superlative/comparison/causal phrase(s): ${claims.join(", ")}` : "",
+      ].filter(Boolean).join("; ");
       throw new Error(
-        `${dashboard.insights_source} insights cite number(s) absent from the dashboard aggregates: ${offending.join(", ")} — no fabricated number may ship.`,
+        `${dashboard.insights_source} insights contain ${why} — no fabricated number or unsupported value judgment may ship.`,
       );
-    checks.push(`✓ ${dashboard.insights_source} insights pass the no-fabrication check (every number traces to an aggregate)`);
+    }
+    checks.push(`✓ ${dashboard.insights_source} insights pass the no-fabrication + no-qualitative-claim check`);
   } else {
     checks.push(`✓ insights are template/none — no-fabrication check is a no-op`);
   }

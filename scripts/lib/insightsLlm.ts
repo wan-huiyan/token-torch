@@ -73,11 +73,17 @@ export async function buildInsightsLLM(data: DashboardData): Promise<string | nu
         correction = "Your previous response was empty. Write the insights note now, following all rules.";
         continue;
       }
-      const { ok, offending } = validateInsightNumbers(prose, data);
+      const { ok, offending, claims } = validateInsightNumbers(prose, data);
       if (ok) return prose.trim();
-      correction =
-        `Your previous note contained number(s) not present in the ground-truth data: ${offending.join(", ")}. ` +
-        `Rewrite the note using ONLY the citable numbers listed above. Do not invent or recompute any figure.`;
+      const parts = [
+        offending.length
+          ? `number(s) not present in the ground-truth data: ${offending.join(", ")} — use ONLY the citable numbers above, do not invent or recompute any figure`
+          : "",
+        claims.length
+          ? `forbidden superlative/comparison/causal phrase(s): ${claims.join(", ")} — drop them; describe shares and factual rankings, never value judgments, model comparisons, or causes (HARD RULES 2 & 5)`
+          : "",
+      ].filter(Boolean);
+      correction = `Your previous note contained ${parts.join("; and ")}. Rewrite the note accordingly.`;
     }
   } catch (err) {
     // Invalid key (401), network, rate-limit, etc. — never crash generate; fall back to template.
