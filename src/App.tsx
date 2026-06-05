@@ -3,6 +3,8 @@ import type { DashboardData, SessionDetailData } from "./types";
 import { dashboardFixture, sessionDemo } from "./fixtures";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { SessionPage } from "./session/SessionPage";
+import { AboutPage } from "./dashboard/AboutPage";
+import { type Route, parseHashString } from "./route";
 
 /* ---------------------------------------------------------------------------
  * App shell + hash router. Pure static SPA: data comes from the generator's
@@ -14,14 +16,8 @@ import { SessionPage } from "./session/SessionPage";
  *   #/sessions/:id    → session detail
  * ------------------------------------------------------------------------- */
 
-type Route = { name: "dashboard" } | { name: "breakdown" } | { name: "session"; id: string };
-
-function parseHash(): Route {
-  const m = window.location.hash.match(/^#\/sessions\/([^/?#]+)/);
-  if (m) return { name: "session", id: decodeURIComponent(m[1]) };
-  if (/^#\/breakdown/.test(window.location.hash)) return { name: "breakdown" };
-  return { name: "dashboard" };
-}
+// Route union + parsing live in ./route (React-free, unit-tested).
+const parseHash = (): Route => parseHashString(window.location.hash);
 
 const go = (hash: string) => {
   if (window.location.hash !== hash) window.location.hash = hash;
@@ -116,6 +112,9 @@ export function App() {
 
   if (route.name === "session") {
     return <SessionRoute id={route.id} onBack={() => go("#/")} />;
+  }
+  if (route.name === "about") {
+    return <AboutPage onBack={() => go("#/")} />;
   }
   if (dashboard.status !== "ready") return <Loading />;
   const openSession = (id: string) => go(`#/sessions/${encodeURIComponent(id)}`);
