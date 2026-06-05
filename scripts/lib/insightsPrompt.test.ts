@@ -21,4 +21,15 @@ check("buildInsightsRequest contains the contextBlock verbatim", () => {
   assert.ok(buildInsightsRequest(f).includes(buildContextBlock(f)), "embeds buildContextBlock verbatim");
 });
 
+// #27 — the prompt instructs the model to emit the inline PCN model_mix binding tags with the
+// exact ids+values, and notes they are stripped before display.
+check("buildContextBlock instructs the [[mm:id=value]] model_mix binding tags (exact ids+values, stripped)", () => {
+  const f = dashboardFixture();
+  f.distributions.model_mix = { "claude-opus-4-8": 80, "claude-opus-4-7": 20 };
+  const b = buildContextBlock(f);
+  assert.ok(/\[\[mm:/.test(b), "names the [[mm: tag syntax");
+  assert.ok(b.includes("[[mm:claude-opus-4-8=80]]"), "lists the exact tag for each model_mix id");
+  assert.ok(/strip/i.test(b), "notes the tags are stripped before display");
+});
+
 console.log(`\n${passed} insights-prompt checks passed`);
