@@ -2,7 +2,7 @@
  * TOKEN TORCH redesign — Model & effort tab (the old #/breakdown folds in here).
  * Three blocks IN ORDER, recreating 00-dashboard.html lines 165-201 +
  * dashboard.js renderBreakdown/renderHeatmap/renderModelMix:
- *   1) ConfoundBanner FIRST (.confound)  — breakdown ≠ comparison, verbatim copy.
+ *   1) Confound banner FIRST (.confound) — breakdown ≠ comparison, verbatim copy.
  *   2) Model × effort heatmap (.heat)     — 5-metric toggle, REAL axes from the
  *      window, OKLCH per-metric-hue quantile shading (technique mined from
  *      CostHeatmap: quantile rank→scale, empty "·", small-n disclosure, floor),
@@ -59,8 +59,9 @@ type HeatMetric = "cost" | "cpm" | "active" | "sessions" | "output";
 
 /* ===========================================================================
  * BLOCK 1 — Confound banner (.confound). Static, verbatim copy from the
- * prototype lines 166-173. Non-negotiably the first element. (ConfoundBanner.tsx
- * carries the same semantics but a different markup; we render the prototype's.)
+ * prototype lines 166-173. Non-negotiably the first element. (The standalone
+ * dashboard/ConfoundBanner.tsx — same semantics, different markup — was deleted
+ * in #42 as a dead orphan; this inline Confound is the live one.)
  * ========================================================================= */
 function Confound() {
   return (
