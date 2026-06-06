@@ -22,6 +22,11 @@ export interface EffortInput {
 export interface SettingsFacts {
   settingsEffort: string | null; // effortLevel value, or null if unreadable
   settingsMtimeMs: number | null; // settings.json mtime ms, or null if unreadable
+  /** The effort default in effect BEFORE the current settings change (e.g. read from
+   *  settings.json.bak). When present, sessions that started before settingsMtimeMs are
+   *  attributed to THIS prior value — they ran under the old default, not today's. Null
+   *  (or equal to settingsEffort) → no known change → old behavior. */
+  priorEffort?: string | null;
 }
 
 /** Parse the leading effort value token out of a "Set effort level to <X> ..." string.
@@ -41,7 +46,13 @@ export function deriveEffort(input: EffortInput, settings: SettingsFacts): Effor
   if (settings.settingsEffort == null || settings.settingsMtimeMs == null) {
     return { value: "unknown", source: "unknown", confidence: "low" };
   }
-  const confidence: "high" | "low" =
-    input.startedAtMs != null && input.startedAtMs >= settings.settingsMtimeMs ? "high" : "low";
-  return { value: settings.settingsEffort, source: "inferred_default", confidence };
+  // Started on/after the current settings were written → today's default, high confidence.
+  if (input.startedAtMs != null && input.startedAtMs >= settings.settingsMtimeMs) {
+    return { value: settings.settingsEffort, source: "inferred_default", confidence: "high" };
+  }
+  // Started before the change (or no timestamp): this session ran under the PRIOR default
+  // if we know it (from the backup); otherwise fall back to today's value. Low confidence
+  // either way — historical, and we only have one prior snapshot.
+  const value = settings.priorEffort ?? settings.settingsEffort;
+  return { value, source: "inferred_default", confidence: "low" };
 }

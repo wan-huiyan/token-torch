@@ -58,7 +58,17 @@ function readSettingsFacts(): SettingsFacts {
     const effort = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"))?.effortLevel ?? null;
     const settingsEffort = typeof effort === "string" ? effort : null;
     const settingsMtimeMs = statSync(SETTINGS_PATH).mtimeMs;
-    return { settingsEffort, settingsMtimeMs };
+    // Prior default from the backup, when present + different — so sessions that started
+    // before the current effortLevel was written are attributed to the value actually in
+    // effect then (not today's). Missing/same backup → priorEffort null → old behavior.
+    let priorEffort: string | null = null;
+    try {
+      const bak = JSON.parse(readFileSync(SETTINGS_PATH + ".bak", "utf8"))?.effortLevel ?? null;
+      if (typeof bak === "string" && bak !== settingsEffort) priorEffort = bak;
+    } catch {
+      /* no readable backup → priorEffort stays null */
+    }
+    return { settingsEffort, settingsMtimeMs, priorEffort };
   } catch {
     return { settingsEffort: null, settingsMtimeMs: null };
   }

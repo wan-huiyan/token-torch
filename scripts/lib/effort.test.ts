@@ -45,6 +45,29 @@ check("no marker and no startedAtMs -> inferred_default, low confidence (can't p
   assert.deepEqual(deriveEffort({}, settings), { value: "high", source: "inferred_default", confidence: "low" });
 });
 
+// --- deriveEffort: TIME-AWARE prior default (the settings effortLevel CHANGED; the
+//     backup carries the value that was in effect before). Sessions that started before
+//     the change ran under the PRIOR default, not today's value. ---
+const changed: SettingsFacts = { settingsEffort: "xhigh", settingsMtimeMs: CUTOFF_MS, priorEffort: "high" };
+check("no marker, started BEFORE the change -> PRIOR default (high), low confidence", () => {
+  assert.deepEqual(deriveEffort({ startedAtMs: CUTOFF_MS - 1 }, changed), {
+    value: "high", source: "inferred_default", confidence: "low",
+  });
+});
+check("no marker, started ON/AFTER the change -> CURRENT default (xhigh), high confidence", () => {
+  assert.deepEqual(deriveEffort({ startedAtMs: CUTOFF_MS }, changed), {
+    value: "xhigh", source: "inferred_default", confidence: "high",
+  });
+});
+check("no marker, no startedAtMs, prior known -> PRIOR default (high), low confidence", () => {
+  assert.deepEqual(deriveEffort({}, changed), { value: "high", source: "inferred_default", confidence: "low" });
+});
+check("no prior default (no backup) -> current value before mtime, low confidence (back-compat)", () => {
+  assert.deepEqual(deriveEffort({ startedAtMs: CUTOFF_MS - 1 }, settings), {
+    value: "high", source: "inferred_default", confidence: "low",
+  });
+});
+
 // --- deriveEffort: UNKNOWN when settings unreadable (honest sentinel, never fabricate "high") ---
 check("settings unreadable -> source unknown, value unknown, confidence low", () => {
   const noSettings: SettingsFacts = { settingsEffort: null, settingsMtimeMs: null };
