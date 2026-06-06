@@ -120,6 +120,21 @@ function verify(
     `✓ floor accounting: ${ingest.kept} kept + ${ingest.droppedFloor} floored == ${ingest.discovered} discovered`,
   );
 
+  // #2 contribution-calendar contract: shipped_count and shipped_short are both produced by
+  // extractShipped, so they must co-occur (a count without a summary, or vice versa, means a
+  // wiring drift). shipped_count, when present, must be a positive integer.
+  for (const r of dashboard.sessions) {
+    const hasCount = r.shipped_count != null;
+    const hasShort = r.shipped_short != null;
+    if (hasCount !== hasShort)
+      throw new Error(
+        `[${r.id}] shipped_count/shipped_short mismatch (count=${r.shipped_count}, short=${JSON.stringify(r.shipped_short)}) — both come from extractShipped and must co-occur`,
+      );
+    if (hasCount && !(Number.isInteger(r.shipped_count) && (r.shipped_count as number) > 0))
+      throw new Error(`[${r.id}] shipped_count must be a positive integer, got ${r.shipped_count}`);
+  }
+  checks.push(`✓ shipped_count ⟺ shipped_short on all ${dashboard.sessions.length} rows (calendar contract)`);
+
   // cost_by_fidelity sums to the grand total.
   const fid = Math.round((dashboard.totals.cost_by_fidelity.high + dashboard.totals.cost_by_fidelity.main_loop) * 100);
   if (fid !== Math.round(dashboard.totals.cost_usd * 100))

@@ -242,6 +242,10 @@ export interface SessionRow {
   /** S11 — optional/additive. Short "what shipped" summary (e.g. "3 PRs · 2 reviews").
    *  Present ONLY when extractShipped produced a Shipped for this session (honest omit). */
   shipped_short?: string;
+  /** #2 — optional/additive. Total count of real shipped outputs (PRs + nested commits +
+   *  nested/top-level reviews + direct commits + skills + ADRs) for the what-shipped
+   *  contribution calendar. Present ⟺ shipped_short present (both from extractShipped). */
+  shipped_count?: number;
   /** S11 — optional/additive. Real per-session time-phase split (minutes of ACTIVE
    *  wall-clock) for the dashboard phase donut. Absent on older fixtures. */
   active_breakdown?: { thinking_min: number; tool_min: number; subagent_min: number; planning_min: number };
