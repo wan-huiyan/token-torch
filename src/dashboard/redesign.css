@@ -351,7 +351,12 @@ canvas.miniflame{image-rendering:pixelated}
 .ac-quip .aq-badge{position:absolute;top:-9px;left:14px;font-family:var(--mono);font-size:.52rem;letter-spacing:.18em;text-transform:uppercase;color:var(--bg);background:var(--cyan);padding:3px 8px;border-radius:20px;font-weight:700;box-shadow:0 0 12px oklch(0.83 0.145 210 / .5)}
 .ac-quip p{margin:0;font-family:var(--sans);font-size:.84rem;line-height:1.55;color:var(--ink-dim);text-wrap:pretty}
 .ac-quip p b{font-weight:800}
-#acDonut.donut{position:relative;width:400px;height:400px;max-width:100%}
+/* #51: was #acDonut.donut — the JSX div has no id, so that selector never matched and
+   session/redesign.css's bare `.donut{width:220px}` (loaded globally, same specificity, later)
+   leaked in → the stage rendered at 220px while the core (left:85/w:230) and the JS marker
+   geometry (cx/cy=200, Rm=168) are laid out for a 400px box → markers scattered/overlapped.
+   Scoping under .computepanel (0,2,0) beats the session rule (0,1,0) with no JSX change. */
+.computepanel .donut{position:relative;width:400px;height:400px;max-width:100%}
 .donut-stage{position:absolute;inset:0}
 .donut svg{display:block}
 .donut circle.donut-arc{transition:opacity .22s ease;cursor:pointer}
@@ -383,7 +388,7 @@ canvas.miniflame{image-rendering:pixelated}
 @keyframes scribble{0%{transform:translateX(0) rotate(-9deg)}25%{transform:translateX(-1.6px) rotate(5deg)}50%{transform:translateX(1.6px) rotate(-7deg)}75%{transform:translateX(-1px) rotate(6deg)}100%{transform:translateX(0) rotate(-9deg)}}
 .ax-tool{position:absolute;top:-4px;right:-3px;transform-origin:60% 40%;animation:axturn 2.2s ease-in-out infinite}
 @keyframes axturn{0%,100%{transform:rotate(-16deg)}50%{transform:rotate(18deg)}}
-.ac-detail{min-height:380px;display:flex;flex-direction:column}
+.ac-detail{min-height:600px;display:flex;flex-direction:column}/* #51: was 380px — the "work" phase (tool balloons) is ~597px tall but "model"/"subagent" are ~492px, so hovering between phases reflowed the panel by ~100-300px (the flicker). Lock to the tallest phase (stable 589-597 across all windows) so phase switches never change the row height */
 .ac-detail.ac-centered{justify-content:center}
 .ac-dhead{display:flex;align-items:center;gap:10px;font-family:var(--mono);margin-bottom:8px}
 .ac-ddot{width:11px;height:11px;border-radius:50%;flex:none}
@@ -477,8 +482,8 @@ canvas.miniflame{image-rendering:pixelated}
 .actleg .alr b{margin-left:auto;color:var(--ink);font-weight:700}
 .actleg .alr .alp{width:42px;text-align:right;font-weight:700}
 .tools-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:0 28px}
-.balloons{display:flex;flex-wrap:wrap;gap:1px 6px;align-items:flex-start;justify-content:center;max-width:100%;margin:0 auto;padding:14px 2px 10px}
-.balloon{display:flex;flex-direction:column;align-items:center;animation:bfloat var(--bd,4s) ease-in-out infinite;cursor:help;outline:none;margin-top:var(--by,0);margin-left:var(--bx,0);margin-right:var(--bx,0)}
+.balloons{display:flex;flex-wrap:wrap;gap:20px 14px;align-items:flex-start;justify-content:center;max-width:100%;margin:0 auto;padding:12px 2px 8px}/* #51: row gap 20px (was 1px) — the old layout leaned on a random per-balloon top margin for vertical spread, which scattered them; tidy uniform rows now */
+.balloon{display:flex;flex-direction:column;align-items:center;animation:bfloat var(--bd,4s) ease-in-out infinite;cursor:help;outline:none}
 .bln{width:var(--bw);height:var(--bh);border-radius:50% 50% 49% 49%;
   background:radial-gradient(circle at 38% 30%,color-mix(in oklch,var(--bc) 24%,transparent),transparent 62%),linear-gradient(180deg,var(--panel-2),var(--bg));
   border:1.5px solid color-mix(in oklch,var(--bc) 62%,transparent);

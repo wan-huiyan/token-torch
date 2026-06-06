@@ -332,9 +332,10 @@ function PhaseDetail({
             const frac = tMax > tMin ? (t.v - tMin) / (tMax - tMin) : 1;
             const sz = Math.round(56 + Math.pow(frac, 0.6) * 58);
             const bc = inter ? "var(--amber)" : BALLOON_COLS[j % 3];
-            const by = [0, 30, 11, 44, 5, 34, 18, 50, 8, 26][j % 10];
-            const bx = [-5, 7, -9, 3, -2, 9, -6, 4][j % 8];
-            const rot = ((j * 37) % 23) - 11;
+            // #51: dropped the random --by/--bx stagger that scattered the balloons to
+            // wildly different heights (the "messy" look). They now flow in tidy rows
+            // (uniform flex gap); a small per-balloon tilt + the float keep them lively.
+            const rot = ((j * 37) % 15) - 7;
             const dly = ((j * 29) % 11) / 5;
             return (
               <div
@@ -349,8 +350,6 @@ function PhaseDetail({
                     "--bh": `${sz}px`,
                     "--bc": bc,
                     "--bd": `${(3.4 + (j % 5) * 0.45).toFixed(1)}s`,
-                    "--by": `${by}px`,
-                    "--bx": `${bx}px`,
                     "--rot": `${rot}deg`,
                     animationDelay: `${dly.toFixed(2)}s`,
                   } as React.CSSProperties
