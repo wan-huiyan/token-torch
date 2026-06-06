@@ -59,6 +59,25 @@ export interface ContextOverhead {
   reread_saved_usd?: number;
 }
 
+/** A curated annotation (a known event date) on the savings chart — not a data point. */
+export interface CatalogFlipMarker {
+  date: string;  // ISO day
+  label: string; // e.g. "404-trap flip"
+}
+
+/** context-police "tokens saved over time" — additive/optional (absent on older data → panel hidden).
+ *  All-time per-day series (not windowed, mirroring the OverheadPanel precedent). ESTIMATE. */
+export interface CatalogSavings {
+  daily: { date: string; est_saving_tokens: number; observed_floor: number }[];
+  cumulative_tokens: number;     // Σ est_saving_tokens since the first snapshot
+  hidden_count: number;          // latest snapshot
+  total_skills: number;          // latest snapshot
+  per_injection_tokens: number;  // latest snapshot (bare-name floor of hidden skills)
+  est_usd: number;               // cumulative_tokens priced at the cache-read rate (upper bound)
+  flip_marker?: CatalogFlipMarker;
+  note: string;                  // honest caveat copy
+}
+
 /** B4 — one reconstructed 5-hour rolling window (ccusage-faithful boundaries). ESTIMATE.
  *  Optional/additive on DashboardData → older fixtures omit it and the panel hides. */
 export interface BillingWindow {
