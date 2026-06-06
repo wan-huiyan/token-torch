@@ -11,19 +11,13 @@
  * the genuine per-day cost; the weekend tally is descriptive, not a judgement.
  * Reduced motion: the SVG is fully static (no entrance reveal hides content) —
  * the only motion is the moon pixel sprite, which respects reduced-motion itself.
- *
- * The B4 5-hour-window panel (<BillingWindows>) lives here by design decision;
- * it self-hides when data.billing_windows is absent and carries its own honest
- * "local lower-bound, not a quota" caveat.
  * ========================================================================== */
 import { useLayoutEffect, useRef, useState } from "react";
-import type { DashboardData } from "../../types";
 import { usd, num, fmtDate } from "../helpers";
 import { useWindow } from "../useWindow";
 import { dailySeries, fmtMin, type DailyPoint } from "../windowAgg";
 import { Sprite } from "../Sprite";
 import { mountIcon } from "../spriteEngine";
-import { BillingWindows } from "../BillingWindows";
 
 interface Tip {
   d: DailyPoint;
@@ -33,7 +27,7 @@ interface Tip {
 
 const isWeekend = (dow: number): boolean => dow === 0 || dow === 6;
 
-export function TimelineTab({ data }: { data: DashboardData }) {
+export function TimelineTab() {
   const { sessions, range, isAll } = useWindow();
   const series = dailySeries(sessions, range);
 
@@ -289,9 +283,6 @@ export function TimelineTab({ data }: { data: DashboardData }) {
           </>
         )}
       </div>
-
-      {/* B4 — 5-hour-window panel (self-hides when absent) */}
-      <BillingWindows data={data} />
     </>
   );
 }

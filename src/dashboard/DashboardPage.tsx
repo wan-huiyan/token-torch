@@ -86,7 +86,7 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
 
       <div className="panel-wrap">
         {tab === "sessions" && <SessionsTab data={data} onOpenSession={onOpenSession} />}
-        {tab === "timeline" && <TimelineTab data={data} />}
+        {tab === "timeline" && <TimelineTab />}
         {tab === "distributions" && <DistributionsTab data={data} />}
         {tab === "breakdown" && <ModelEffortTab data={data} />}
         {tab === "recs" && <RecsTab data={data} />}
