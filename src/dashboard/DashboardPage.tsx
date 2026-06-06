@@ -14,6 +14,7 @@ import { Ticker } from "./redesign/Ticker";
 import { Hero } from "./redesign/Hero";
 import { StatStrip } from "./redesign/StatStrip";
 import { Podium } from "./redesign/Podium";
+import { AwardsPanel } from "./redesign/AwardsPanel";
 import { WindowControl } from "./redesign/WindowControl";
 import { SessionsTab } from "./redesign/SessionsTab";
 import { TimelineTab } from "./redesign/TimelineTab";
@@ -64,6 +65,7 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
       <Hero data={data} />
       <StatStrip data={data} />
       <Podium data={data} />
+      <AwardsPanel />
       <WindowControl data={data} />
 
       <nav className="tabbar" role="tablist" aria-label="dashboard views">
