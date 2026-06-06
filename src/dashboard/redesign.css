@@ -675,3 +675,18 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 .tour-ctl button.tour-skip { margin-right: auto; opacity: .7; }
 .tour-dots { font-size: .7rem; color: var(--ink-faint); }
 .estlink { color: var(--cyan); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* ---- Awards carousel (#fun) — scoped under .awards to avoid generic-class collisions ---- */
+.awards{padding:clamp(16px,2.4vw,24px)}
+.awards .aw-stage{min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:10px 6px;animation:awReveal .5s ease both}
+@keyframes awReveal{0%{opacity:0;transform:translateY(10px) scale(.97)}100%{opacity:1;transform:none}}
+.awards .aw-head{font-family:var(--mono);font-size:1rem;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+.awards .aw-value{font-family:var(--mono);font-size:1.7rem;font-weight:800;color:var(--lime);text-shadow:0 0 18px color-mix(in oklch,var(--lime) 45%,transparent)}
+.awards .aw-comment{font-family:var(--sans);font-size:.9rem;line-height:1.5;color:var(--ink-dim);max-width:520px;margin:0;text-wrap:pretty}
+.awards .aw-comment.aw-empty{color:var(--ink-faint)}
+.awards .aw-link{font-family:var(--mono);font-size:.66rem;color:var(--cyan);text-decoration:none;opacity:.85}
+.awards .aw-link:hover{opacity:1;text-decoration:underline}
+.awards .aw-dots{display:flex;gap:7px;justify-content:center;margin-top:12px}
+.awards .aw-dot{width:8px;height:8px;border-radius:50%;border:0;background:var(--line);cursor:pointer;padding:0;transition:.15s}
+.awards .aw-dot.on{background:var(--cyan);box-shadow:0 0 8px color-mix(in oklch,var(--cyan) 60%,transparent)}
+.tt-reduced .awards .aw-stage{animation:none}
