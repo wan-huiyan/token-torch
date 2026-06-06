@@ -24,12 +24,17 @@ export function BillingWindows({ data }: { data: DashboardData }) {
 
   return (
     <Section title="5-hour windows" n="estimate">
+      <p className="bw-lead">
+        How your activity clusters into Claude's rolling 5-hour usage windows, reconstructed from this
+        machine's Claude Code timestamps. It's <b>activity, not a quota</b> — your real plan limit is
+        shared across claude.ai, Desktop and every device, so this is a lower bound, never "% of a limit."
+      </p>
       <div className="bw-grid">
         <div className="bw-stat">
           {c.is_active ? (
             <>
               <div className="bw-big">{mins(remainingMin)} left</div>
-              <div className="bw-cap">current window — started {clock(c.start_ms)}, resets {clock(c.end_ms)} (as of {asOf})</div>
+              <div className="bw-cap">until the current 5-hour window resets at {clock(c.end_ms)} — time left in the window, not quota left. Started {clock(c.start_ms)} (as of {asOf})</div>
             </>
           ) : (
             <>
