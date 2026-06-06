@@ -348,6 +348,32 @@ function verify(
     );
   }
 
+  // ---- context-police catalog savings (estimate) bounds ----
+  const cs = dashboard.catalog_savings;
+  if (cs && cs.daily.length) {
+    if (cs.hidden_count > cs.total_skills)
+      throw new Error(`catalog-savings hidden_count ${cs.hidden_count} > total_skills ${cs.total_skills}`);
+    if (cs.per_injection_tokens < 0)
+      throw new Error(`catalog-savings per_injection_tokens ${cs.per_injection_tokens} < 0`);
+    if (cs.est_usd < 0)
+      throw new Error(`catalog-savings est_usd ${cs.est_usd} < 0`);
+    let run = 0;
+    for (let i = 0; i < cs.daily.length; i++) {
+      const d = cs.daily[i];
+      if (i > 0 && d.date <= cs.daily[i - 1].date)
+        throw new Error(`catalog-savings daily not date-ascending at ${d.date}`);
+      if (d.est_saving_tokens < 0)
+        throw new Error(`catalog-savings est_saving_tokens ${d.est_saving_tokens} < 0 at ${d.date}`);
+      run += d.est_saving_tokens;
+    }
+    if (run !== cs.cumulative_tokens)
+      throw new Error(`catalog-savings cumulative_tokens ${cs.cumulative_tokens} != Σ daily ${run}`);
+    checks.push(
+      `✓ catalog-savings: ${cs.hidden_count}/${cs.total_skills} hidden, ~${Math.round(cs.per_injection_tokens).toLocaleString()} tok/injection; ` +
+        `cumulative ${cs.cumulative_tokens.toLocaleString()} tok ($${cs.est_usd} est) over ${cs.daily.length} day(s)`,
+    );
+  }
+
   // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
   // must trace to a dashboard-level aggregate (the honesty gate). Template path
   // (or null) is a no-op pass — templates only emit numbers from the same source.
