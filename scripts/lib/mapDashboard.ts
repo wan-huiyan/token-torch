@@ -18,6 +18,8 @@ import { loadPlanConfig } from "./plan";
 import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
 import { deriveBillingWindows, eventsFromRecords } from "./billingWindows";
 import { isRealModelId } from "../../src/shared/models";
+import { deriveCatalogSavings } from "./catalogSavings";
+import type { CatalogSnapshot } from "./catalogSnapshot";
 
 const SMALL_N_THRESHOLD = 10;
 
@@ -120,6 +122,7 @@ export function mapDashboard(
   /** Provenance to stamp when `llmInsightsMd` is non-null. Defaults to "llm" so the
    *  existing single-arg LLM call site is unchanged; the agent path passes "agent". */
   insightsSource: "llm" | "agent" = "llm",
+  catalogSnapshots: CatalogSnapshot[] = [],
 ): GenerateResult {
   const details: SessionDetailData[] = [];
   const rows: SessionRow[] = [];
@@ -141,6 +144,9 @@ export function mapDashboard(
   let ovTurns = 0;
   let ovMainInputSide = 0;
   let ovRereadSavedUsd = 0;
+  // context-police catalog-savings inputs (per-day injections + base-context floors).
+  const injByDay = new Map<string, number>();
+  const floorsByDay = new Map<string, number[]>();
 
   for (const rec of records) {
     fileCount += rec.rawProjectDirs.length; // transcripts merged for this session
@@ -177,6 +183,14 @@ export function mapDashboard(
     ovRereadSavedUsd += context_overhead.reread_saved_usd ?? 0;
     for (const t of Object.values(rec.perModelTokens))
       ovMainInputSide += t.fresh_input + t.cache_write + t.cache_read;
+
+    // ---- catalog-savings inputs: per-day injections (turns + subagent dispatches) + floors ----
+    injByDay.set(rec.date, (injByDay.get(rec.date) ?? 0) + rec.turnCount + fb.subagentTimings.length);
+    if (rec.scaffoldingFloor > 0) {
+      const arr = floorsByDay.get(rec.date) ?? [];
+      arr.push(rec.scaffoldingFloor);
+      floorsByDay.set(rec.date, arr);
+    }
 
     details.push(detail);
 
@@ -326,6 +340,14 @@ export function mapDashboard(
     reread_saved_usd: round2(ovRereadSavedUsd), // Σ per-session (mirrors reread_usd)
   };
 
+  // context-police catalog-savings series (issue: hidden-skill catalog tokens saved over time).
+  const catalog_savings = deriveCatalogSavings(
+    catalogSnapshots,
+    injByDay,
+    floorsByDay,
+    { date: "2026-06-04", label: "404-trap flip" },
+  );
+
   const totals: DashboardData["totals"] = {
     cost_usd,
     // Headline total is COMPLETE: displayed (kept) cost + the floored usage-bearing $.
@@ -418,6 +440,7 @@ export function mapDashboard(
     insights_source: llmInsightsMd ? insightsSource : "template",
     plan: loadPlanConfig(rows),
     billing_windows: deriveBillingWindows(eventsFromRecords(records), Date.parse(generatedAtIso)),
+    catalog_savings,
   };
 
   return {

@@ -34,6 +34,7 @@ import { buildInsightsRequest, INSIGHTS_PROMPT_VERSION } from "./lib/insightsPro
 import { loadAgentInsights } from "./lib/insightsAgent";
 import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
 import { validateInsightNumbers } from "./lib/insightsValidate";
+import { readSkillsDir, computeSnapshot, appendSnapshot, loadSnapshots, DEFAULT_SNAPSHOT_PATH, DEFAULT_SKILLS_DIR } from "./lib/catalogSnapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -417,8 +418,20 @@ async function main(): Promise<void> {
     droppedWithUsageUsd: ingest.droppedWithUsageUsd,
   };
 
+  // context-police catalog snapshot (generate-time capture; local file, never committed).
+  const snapDay = new Date(generatedAt).toISOString().slice(0, 10);
+  try {
+    appendSnapshot(DEFAULT_SNAPSHOT_PATH, computeSnapshot(snapDay, readSkillsDir(DEFAULT_SKILLS_DIR)));
+  } catch (e) {
+    console.warn(`catalog snapshot skipped: ${(e as Error).message}`);
+  }
+  const catalogSnapshots = loadSnapshots(DEFAULT_SNAPSHOT_PATH);
+
   // First pass: template insights (also the grounding source for the agent prompt + LLM path).
-  const base = mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts);
+  const base = mapDashboard(
+    ingest.records, overlay, generatedAt, floor, undefined, settingsFacts,
+    undefined, undefined, catalogSnapshots,
+  );
 
   // Always emit the paste-ready agent prompt (grounded facts + no-fab rules + output target)
   // so a fresh clone can generate insights with its OWN agent — no API key required (#33).
@@ -461,7 +474,7 @@ async function main(): Promise<void> {
 
   // Rebuild only if we have validated agent/LLM prose; otherwise reuse the template pass.
   const { dashboard, details, subagentTiming } = insightsMd
-    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource)
+    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource, catalogSnapshots)
     : base;
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);

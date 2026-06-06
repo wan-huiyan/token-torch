@@ -185,6 +185,8 @@ export interface DashboardData {
     recent: BillingWindow[];     // last ~12 windows, most-recent first
     note: string;                // honest caveat copy
   };
+  /** context-police savings over time — optional/additive (panel hidden when absent). */
+  catalog_savings?: CatalogSavings;
 }
 
 export interface ProjectRow {

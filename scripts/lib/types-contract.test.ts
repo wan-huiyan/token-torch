@@ -143,4 +143,14 @@ check("S11: totals.tokens.total + context_overhead.reread_saved_usd are additive
   assert.equal(withSaved.reread_saved_usd, 0.45);
 });
 
+check("DashboardData.catalog_savings is optional + additive", () => {
+  const cs: NonNullable<DashboardData["catalog_savings"]> = {
+    daily: [{ date: "2026-06-06", est_saving_tokens: 100, observed_floor: 30000 }],
+    cumulative_tokens: 100, hidden_count: 436, total_skills: 910,
+    per_injection_tokens: 5201, est_usd: 0.01, note: "Estimate.",
+  };
+  assert.equal(cs.cumulative_tokens, 100);
+  assert.equal(cs.flip_marker, undefined);
+});
+
 console.log(`\n${passed} types-contract checks passed`);
