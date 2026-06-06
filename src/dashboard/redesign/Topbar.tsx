@@ -3,6 +3,7 @@ import { fmtDate, fmtStamp } from "../helpers";
 import { Sprite } from "../Sprite";
 import { mountMascot } from "../spriteEngine";
 import { useWindow } from "../useWindow";
+import { ReduceMotionToggle } from "./ReduceMotionToggle";
 
 /** Topbar (00-dashboard.html lines 24-37) — pixel mascot + wordmark + live meta.
  *  winMeta uses the resolved active window (useWindow().range), not the static
@@ -32,6 +33,7 @@ export function Topbar({ data }: { data: DashboardData }) {
           </b>{" "}
           · SCHEMA <b>{data.meta.schema_version}</b>
         </div>
+        <ReduceMotionToggle />
       </div>
     </header>
   );

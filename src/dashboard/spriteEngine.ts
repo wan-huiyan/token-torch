@@ -15,6 +15,7 @@
  * ========================================================================== */
 
 import { initReduced, isReduced, trackAnimation } from "./motionRegistry";
+import { getReduceMotion } from "./reduceMotion";
 
 /** A sprite FRAME is string[] (rows); a multi-frame sprite is string[][]. */
 export type Frame = string[];
@@ -28,10 +29,12 @@ export type SpriteCanvas = HTMLCanvasElement & { _draw(fi: number): void };
  * prefers-reduced-motion for these tiny, localized, idle/pointer-driven sprites — they are
  * core to the arcade identity and carry no information, so freezing them only stripped the
  * charm (owner call, S15). We seed the engine as "motion allowed" and never subscribe to a
- * matchMedia change, so isReduced() stays false and every sprite loop runs. The registry /
- * trackAnimation infra is retained (dormant) so a future OPT-IN "reduce animations" toggle
- * could drive it — that is the accessible alternative if it's ever wanted. */
-initReduced(false);
+ * matchMedia change, so isReduced() stays false and every sprite loop runs by default. The
+ * registry / trackAnimation infra drives the OPT-IN "reduce animations" toggle (#56): we seed
+ * from the persisted preference (NOT a hardcoded false) so that whenever spriteEngine is first
+ * evaluated — eager or lazy, before or after the boot init — sprites start consistent with a
+ * saved "reduced" choice instead of flashing on then stopping. */
+initReduced(getReduceMotion());
 
 export function spriteCanvas(frames: Frame[], pal: Palette, scale = 4): SpriteCanvas {
   const w = Math.max(...frames.flat().map((r) => r.length));
