@@ -4,6 +4,7 @@
  * fmtDate, fmtStamp, md, burnTier) plus small React-friendly hooks.
  * ========================================================================== */
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { getReduceMotion, subscribeReduceMotion } from "./reduceMotion";
 
 export const usd = (v: number, c = true): string =>
   "$" + v.toLocaleString("en-US", { minimumFractionDigits: c ? 2 : 0, maximumFractionDigits: c ? 2 : 0 });
@@ -64,31 +65,19 @@ export function md(src: string | null): string | null {
 }
 
 /* ---------------- reduced-motion (shared single subscription) ----------------
- * ONE module-level MediaQueryList read via useSyncExternalStore, so a runtime
- * motion-preference toggle triggers a single coordinated re-render across all
- * consumers — not N independent setState-in-effect storms (which tripped React's
- * "Maximum update depth exceeded" guard when dozens of count-up/grow hooks each
- * re-subscribed and re-set state in the same tick). Signature unchanged. */
-let _rmMql: MediaQueryList | null | undefined;
-function rmQuery(): MediaQueryList | null {
-  if (_rmMql === undefined) {
-    _rmMql = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-  }
-  return _rmMql;
-}
-function rmSubscribe(cb: () => void): () => void {
-  const mq = rmQuery();
-  mq?.addEventListener?.("change", cb);
-  return () => mq?.removeEventListener?.("change", cb);
-}
-// MAXIMUM FUN (S15): the dashboard's decorative motion is ALWAYS on — the snapshot never
-// reports "reduced", so FairyDust / starfield / count-up always animate (owner call; matches
-// spriteEngine). The subscription stays wired so a future opt-in "reduce animations" toggle
-// can flip this to a real preference read. (Also why the session Ambient toggle-storm #44
-// can't fire: `reduced` never becomes true.)
-const rmSnapshot = (): boolean => false;
+ * ONE store subscribed via useSyncExternalStore, so a runtime motion-preference
+ * toggle triggers a single coordinated re-render across all consumers — not N
+ * independent setState-in-effect storms (which tripped React's "Maximum update
+ * depth exceeded" guard when dozens of count-up/grow hooks each re-subscribed
+ * and re-set state in the same tick).
+ *
+ * MAXIMUM FUN (S15) made the dashboard ignore the OS prefers-reduced-motion for
+ * decoration (owner call). #56 replaces that hardwired `false` with the in-app
+ * OPT-IN toggle (reduceMotion.ts) — default still animated, but a user can now
+ * explicitly reduce. The store is the single source of truth that also drives
+ * the canvas registry + the `.tt-reduced` body class. */
 export function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(rmSubscribe, rmSnapshot, () => false);
+  return useSyncExternalStore(subscribeReduceMotion, getReduceMotion, () => false);
 }
 
 /* ----------------------------------------------------------------------------

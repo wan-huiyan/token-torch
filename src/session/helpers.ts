@@ -6,6 +6,7 @@
  * Self-contained in src/session/ (must not import from ../dashboard/).
  * ========================================================================== */
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { getReduceMotion, subscribeReduceMotion } from "../dashboard/reduceMotion";
 
 export const usd = (v: number, c = true): string =>
   "$" + v.toLocaleString("en-US", { minimumFractionDigits: c ? 2 : 0, maximumFractionDigits: c ? 2 : 0 });
@@ -55,29 +56,14 @@ export type { BurnTier, BurnBands } from "../shared/burnTier";
 export { burnTier } from "../shared/burnTier";
 
 /* ---------------- reduced-motion (shared single subscription) ----------------
- * ONE module-level MediaQueryList read via useSyncExternalStore → a runtime
- * motion-preference toggle triggers one coordinated re-render across all consumers,
- * not N setState-in-effect storms (which tripped React's update-depth guard).
- * Signature unchanged. (Mirrors src/dashboard/helpers.ts.) */
-let _rmMql: MediaQueryList | null | undefined;
-function rmQuery(): MediaQueryList | null {
-  if (_rmMql === undefined) {
-    _rmMql = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-  }
-  return _rmMql;
-}
-function rmSubscribe(cb: () => void): () => void {
-  const mq = rmQuery();
-  mq?.addEventListener?.("change", cb);
-  return () => mq?.removeEventListener?.("change", cb);
-}
-// MAXIMUM FUN (S15): the session screen's decorative motion is ALWAYS on — the snapshot never
-// reports "reduced", so the fairy-dust / sprites / count-up always animate (owner call; matches
-// spriteEngine). Subscription stays wired for a future opt-in toggle. Because `reduced` never
-// becomes true, the Ambient toggle re-render storm (#44) cannot fire.
-const rmSnapshot = (): boolean => false;
+ * Reads the SAME in-app opt-in toggle store as the dashboard (reduceMotion.ts),
+ * so the session screen honors the "reduce animations" preference too (#56). One
+ * store subscribed via useSyncExternalStore → one coordinated re-render, not N
+ * setState-in-effect storms (which tripped React's update-depth guard). Default
+ * still animated ("maximum fun"); a user opt-out now reaches the session Ambient
+ * (fairy-dust / count-up) — its sprites already stop via the shared registry. */
 export function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(rmSubscribe, rmSnapshot, () => false);
+  return useSyncExternalStore(subscribeReduceMotion, getReduceMotion, () => false);
 }
 
 /* ----------------------------------------------------------------------------

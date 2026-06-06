@@ -693,6 +693,30 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 .awards .aw-dot.on{background:var(--cyan);box-shadow:0 0 8px color-mix(in oklch,var(--cyan) 60%,transparent)}
 .tt-reduced .awards .aw-stage{animation:none}
 
+/* ---- #56 opt-in "reduce animations" toggle ---- */
+/* The body gets `.tt-reduced` when the user opts out of motion (reduceMotion.ts).
+   Canvas sprite loops are stopped by the motion registry; this neutralises the
+   CSS-keyframe decorations. The tiny-duration form (vs `animation:none`) snaps
+   every element to its END state — `animation:none` can strand an element at its
+   pre-animation frame (e.g. opacity:0 from a keyframe `to`). */
+.tt-reduced *,
+.tt-reduced *::before,
+.tt-reduced *::after{
+  animation-duration:.001ms !important;
+  animation-iteration-count:1 !important;
+  animation-delay:0ms !important;
+  transition-duration:.001ms !important;
+}
+
+/* The toggle pill in the topbar meta. */
+.rm-toggle{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-dim);background:var(--panel-2);border:1px solid var(--line);
+  border-radius:999px;padding:3px 10px;margin-top:6px;cursor:pointer;transition:.15s;
+}
+.rm-toggle:hover{color:var(--ink);border-color:var(--cyan)}
+.rm-toggle[aria-pressed="true"]{color:var(--amber);border-color:color-mix(in oklch,var(--amber) 55%,var(--line))}
+
 /* ---- #62 follow-up: arcade pixel-prettify the heatmap METRIC toggle (scoped to .heatwrap) ---- */
 .heatwrap .sctrl .ctrl-lab{color:var(--cyan);text-shadow:0 0 9px color-mix(in oklch,var(--cyan) 45%,transparent)}
 .heatwrap .sctrl .toggle{border:1px solid color-mix(in oklch,var(--cyan) 28%,transparent);box-shadow:0 0 0 1px var(--bg),inset 0 0 16px oklch(0.83 0.145 210 / .07);image-rendering:pixelated}
