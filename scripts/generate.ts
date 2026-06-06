@@ -34,6 +34,7 @@ import { buildInsightsRequest, INSIGHTS_PROMPT_VERSION } from "./lib/insightsPro
 import { loadAgentInsights } from "./lib/insightsAgent";
 import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
 import { validateInsightNumbers } from "./lib/insightsValidate";
+import { readSkillsDir, computeSnapshot, appendSnapshot, loadSnapshots, DEFAULT_SNAPSHOT_PATH, DEFAULT_SKILLS_DIR } from "./lib/catalogSnapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -347,6 +348,32 @@ function verify(
     );
   }
 
+  // ---- context-police catalog savings (estimate) bounds ----
+  const cs = dashboard.catalog_savings;
+  if (cs && cs.daily.length) {
+    if (cs.hidden_count > cs.total_skills)
+      throw new Error(`catalog-savings hidden_count ${cs.hidden_count} > total_skills ${cs.total_skills}`);
+    if (cs.per_injection_tokens < 0)
+      throw new Error(`catalog-savings per_injection_tokens ${cs.per_injection_tokens} < 0`);
+    if (cs.est_usd < 0)
+      throw new Error(`catalog-savings est_usd ${cs.est_usd} < 0`);
+    let run = 0;
+    for (let i = 0; i < cs.daily.length; i++) {
+      const d = cs.daily[i];
+      if (i > 0 && d.date <= cs.daily[i - 1].date)
+        throw new Error(`catalog-savings daily not date-ascending at ${d.date}`);
+      if (d.est_saving_tokens < 0)
+        throw new Error(`catalog-savings est_saving_tokens ${d.est_saving_tokens} < 0 at ${d.date}`);
+      run += d.est_saving_tokens;
+    }
+    if (run !== cs.cumulative_tokens)
+      throw new Error(`catalog-savings cumulative_tokens ${cs.cumulative_tokens} != Σ daily ${run}`);
+    checks.push(
+      `✓ catalog-savings: ${cs.hidden_count}/${cs.total_skills} hidden, ~${Math.round(cs.per_injection_tokens).toLocaleString()} tok/injection; ` +
+        `cumulative ${cs.cumulative_tokens.toLocaleString()} tok ($${cs.est_usd} est) over ${cs.daily.length} day(s)`,
+    );
+  }
+
   // NO-FABRICATION: if the insights are LLM-written, every $/%/count in the prose
   // must trace to a dashboard-level aggregate (the honesty gate). Template path
   // (or null) is a no-op pass — templates only emit numbers from the same source.
@@ -417,8 +444,20 @@ async function main(): Promise<void> {
     droppedWithUsageUsd: ingest.droppedWithUsageUsd,
   };
 
+  // context-police catalog snapshot (generate-time capture; local file, never committed).
+  const snapDay = new Date(generatedAt).toISOString().slice(0, 10);
+  try {
+    appendSnapshot(DEFAULT_SNAPSHOT_PATH, computeSnapshot(snapDay, readSkillsDir(DEFAULT_SKILLS_DIR)));
+  } catch (e) {
+    console.warn(`catalog snapshot skipped: ${(e as Error).message}`);
+  }
+  const catalogSnapshots = loadSnapshots(DEFAULT_SNAPSHOT_PATH);
+
   // First pass: template insights (also the grounding source for the agent prompt + LLM path).
-  const base = mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts);
+  const base = mapDashboard(
+    ingest.records, overlay, generatedAt, floor, undefined, settingsFacts,
+    undefined, undefined, catalogSnapshots,
+  );
 
   // Always emit the paste-ready agent prompt (grounded facts + no-fab rules + output target)
   // so a fresh clone can generate insights with its OWN agent — no API key required (#33).
@@ -461,7 +500,7 @@ async function main(): Promise<void> {
 
   // Rebuild only if we have validated agent/LLM prose; otherwise reuse the template pass.
   const { dashboard, details, subagentTiming } = insightsMd
-    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource)
+    ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource, catalogSnapshots)
     : base;
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
