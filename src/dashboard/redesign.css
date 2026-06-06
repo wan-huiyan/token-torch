@@ -690,3 +690,10 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 .awards .aw-dot{width:8px;height:8px;border-radius:50%;border:0;background:var(--line);cursor:pointer;padding:0;transition:.15s}
 .awards .aw-dot.on{background:var(--cyan);box-shadow:0 0 8px color-mix(in oklch,var(--cyan) 60%,transparent)}
 .tt-reduced .awards .aw-stage{animation:none}
+
+/* ---- #62 follow-up: arcade pixel-prettify the heatmap METRIC toggle (scoped to .heatwrap) ---- */
+.heatwrap .sctrl .ctrl-lab{color:var(--cyan);text-shadow:0 0 9px color-mix(in oklch,var(--cyan) 45%,transparent)}
+.heatwrap .sctrl .toggle{border:1px solid color-mix(in oklch,var(--cyan) 28%,transparent);box-shadow:0 0 0 1px var(--bg),inset 0 0 16px oklch(0.83 0.145 210 / .07);image-rendering:pixelated}
+.heatwrap .sctrl .toggle button{border-radius:6px}
+.heatwrap .sctrl .toggle button:hover{color:var(--cyan)}
+.heatwrap .sctrl .toggle button.on{background:linear-gradient(180deg,oklch(0.30 0.07 230),oklch(0.20 0.045 235));color:var(--cyan);box-shadow:inset 0 0 0 1px oklch(0.83 0.145 210 / .65),0 0 14px oklch(0.83 0.145 210 / .40);text-shadow:0 0 8px color-mix(in oklch,var(--cyan) 60%,transparent)}
