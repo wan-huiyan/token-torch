@@ -466,7 +466,7 @@ canvas.miniflame{image-rendering:pixelated}
 /* heatmap — bold + cute */
 .heat{margin-top:26px}
 .heatwrap{background:linear-gradient(180deg,var(--panel),var(--bg-2));border:1px solid var(--line);border-radius:16px;padding:clamp(16px,2.4vw,24px);overflow-x:auto}
-.toggle.wrap{flex-wrap:wrap}
+.toggle.flexwrap{flex-wrap:wrap}/* #62: was .toggle.wrap — bare "wrap" collided with the global page-wrapper .wrap (max-width:1500px + 90px bottom padding) which inflated the metric toggle into a giant void frame */
 .heatgrid .hch small{font-size:.5rem;color:var(--ink-faint);letter-spacing:.06em}
 .heat-tip{position:fixed;pointer-events:none;background:var(--raised);border:1px solid var(--amber);border-radius:11px;padding:11px 14px;font-family:var(--mono);font-size:.7rem;line-height:1.65;color:var(--ink-dim);box-shadow:0 14px 34px rgba(0,0,0,.65);opacity:0;transition:opacity .12s;z-index:200;max-width:250px}
 .heat-tip b{color:var(--ink)}
