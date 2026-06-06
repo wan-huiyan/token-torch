@@ -597,6 +597,16 @@ canvas.miniflame{image-rendering:pixelated}
 .ov-stat .v{font-family:var(--mono);font-size:1.15rem;font-weight:700;color:var(--ink);margin-top:4px}
 .ov-stat .v.cy{color:var(--cyan)}.ov-stat .v.li{color:var(--lime)}.ov-stat .v .est{font-size:.58rem;color:var(--amber)}
 
+/* ---------- catalog savings (context-police) ---------- */
+.cs-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0}
+.cs-tile{border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px}
+.cs-tile .k{font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px}
+.cs-tile .v{font-family:var(--mono);font-size:22px;font-weight:800;margin-top:4px}
+.cs-tile .v small{font-size:13px;color:var(--ink-faint);font-weight:600}
+.cs-tile .v.cy{color:var(--cyan)}.cs-tile .v.li{color:var(--lime)}.cs-tile .v .est{font-size:.58rem;color:var(--amber)}
+.cs-svg{width:100%;height:auto;margin:6px 0}
+@media (max-width:640px){.cs-tiles{grid-template-columns:repeat(2,1fr)}}
+
 /* ---------- recommendations ---------- */
 .recs{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;align-items:start}
 .flags{display:flex;flex-direction:column;gap:12px}

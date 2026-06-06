@@ -753,6 +753,109 @@ function OverheadPanel({ data }: { data: DashboardData }) {
   );
 }
 
+function CatalogSavingsPanel({ data }: { data: DashboardData }) {
+  const cs = data.catalog_savings;
+  if (!cs || cs.daily.length < 2) {
+    return cs ? (
+      <div className="ovpanel">
+        <div className="ov-head">
+          <h4>Catalog savings · context-police</h4>
+          <span>collecting</span>
+        </div>
+        <div className="tl-cap">
+          Collecting snapshots — the savings line needs at least two <code>generate</code> runs on different days.{" "}
+          Currently hiding <b>{num(cs.hidden_count)}</b> of {num(cs.total_skills)} skills
+          (~{tokAbbr(cs.per_injection_tokens)} tok/injection). <Est />
+        </div>
+      </div>
+    ) : null;
+  }
+  const W = 720,
+    H = 240,
+    padL = 56,
+    padR = 16,
+    padT = 24,
+    padB = 28;
+  const iw = W - padL - padR,
+    ih = H - padT - padB;
+  const series = cs.daily;
+  const n = series.length;
+  let run = 0;
+  const cum = series.map((d) => (run += d.est_saving_tokens));
+  const maxCum = Math.max(1, ...cum);
+  const maxFloor = Math.max(1, ...series.map((d) => d.observed_floor));
+  const x = (i: number) => padL + (iw / Math.max(1, n - 1)) * i;
+  const yCum = (v: number) => padT + ih - (v / maxCum) * ih;
+  const yFloor = (v: number) => padT + ih - (v / maxFloor) * ih;
+  const cumPts = cum.map((v, i) => `${x(i).toFixed(1)},${yCum(v).toFixed(1)}`).join(" ");
+  const floorPts = series.map((d, i) => `${x(i).toFixed(1)},${yFloor(d.observed_floor).toFixed(1)}`).join(" ");
+  const flipIdx = cs.flip_marker ? series.findIndex((d) => d.date >= cs.flip_marker!.date) : -1;
+  return (
+    <div className="ovpanel">
+      <div className="ov-head">
+        <h4>Catalog savings · context-police</h4>
+        <span>estimated tokens not carried, over time · all-time</span>
+      </div>
+      <div className="cs-tiles">
+        <div className="cs-tile">
+          <div className="k">hidden now</div>
+          <div className="v">
+            {num(cs.hidden_count)}
+            <small>/{num(cs.total_skills)}</small>
+          </div>
+        </div>
+        <div className="cs-tile">
+          <div className="k">saved / injection</div>
+          <div className="v cy">{tokAbbr(cs.per_injection_tokens)}</div>
+        </div>
+        <div className="cs-tile">
+          <div className="k">cumulative not carried</div>
+          <div className="v">
+            {tokAbbr(cs.cumulative_tokens)} <Est>est</Est>
+          </div>
+        </div>
+        <div className="cs-tile">
+          <div className="k">~ value</div>
+          <div className="v li">
+            ~{usd(cs.est_usd, false)} <Est>est</Est>
+          </div>
+        </div>
+      </div>
+      <svg className="cs-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="catalog savings over time">
+        {[0, 1, 2, 3].map((g) => {
+          const gy = padT + ih - (g / 3) * ih;
+          return <line key={g} x1={padL} y1={gy} x2={W - padR} y2={gy} stroke="var(--line-soft)" strokeWidth="1" />;
+        })}
+        <polyline points={floorPts} fill="none" stroke="var(--ink-faint)" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.5" />
+        <polyline points={cumPts} fill="none" stroke="var(--cyan)" strokeWidth="2.5" style={{ filter: "drop-shadow(0 0 5px var(--cyan))" }} />
+        {flipIdx >= 0 && (
+          <g>
+            <line x1={x(flipIdx)} y1={padT} x2={x(flipIdx)} y2={padT + ih} stroke="var(--magenta)" strokeWidth="1" strokeDasharray="3 3" />
+            <text x={x(flipIdx) + 4} y={padT + 10} fontFamily="var(--mono)" fontSize="9" fill="var(--magenta)">
+              {cs.flip_marker!.label}
+            </text>
+          </g>
+        )}
+        <text x={padL} y={H - 8} fontFamily="var(--mono)" fontSize="9" fill="var(--ink-faint)">
+          {series[0].date}
+        </text>
+        <text x={W - padR} y={H - 8} textAnchor="end" fontFamily="var(--mono)" fontSize="9" fill="var(--ink-faint)">
+          {series[n - 1].date}
+        </text>
+      </svg>
+      <div className="tl-cap">
+        <b className="cy" style={{ color: "var(--cyan)" }}>
+          ━
+        </b>{" "}
+        estimated tokens not carried (cumulative) ·
+        <b style={{ color: "var(--ink-faint)" }}> ┄</b> observed base-context floor (confounded proxy, not causal).{" "}
+        Counterfactual <Est /> — what you&apos;d re-carry if these {num(cs.hidden_count)} skills weren&apos;t hidden, ×
+        your real turns + subagents. {cs.note}
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================================
  * Tab root
  * ========================================================================== */
@@ -764,6 +867,7 @@ export function DistributionsTab({ data }: { data: DashboardData }) {
       <ComputePanel sessions={sessions} />
       <WhenPanel sessions={sessions} />
       <OverheadPanel data={data} />
+      <CatalogSavingsPanel data={data} />
     </>
   );
 }
