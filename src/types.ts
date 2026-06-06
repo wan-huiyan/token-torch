@@ -79,18 +79,6 @@ export interface CatalogSavings {
   note: string;                  // honest caveat copy
 }
 
-/** B4 — one reconstructed 5-hour rolling window (ccusage-faithful boundaries). ESTIMATE.
- *  Optional/additive on DashboardData → older fixtures omit it and the panel hides. */
-export interface BillingWindow {
-  start_ms: number;        // floored to the UTC hour (ccusage rule)
-  end_ms: number;          // start_ms + 5h (18_000_000)
-  active_min: number;      // active-minutes in window (Σ inter-event gaps ≤120s; the app's time model)
-  event_count: number;     // log events in window (exact)
-  session_count: number;   // distinct sessions touching the window (exact)
-  project_count: number;   // distinct projects touching the window (exact)
-  is_active: boolean;      // current window only; vs generated_at_ms (ccusage active rule)
-}
-
 /* ----------------------------- Dashboard ----------------------------------- */
 
 export interface DashboardData {
@@ -171,20 +159,6 @@ export interface DashboardData {
     spend_usd: number;       // cost in the current cycle window (derived from sessions[])
     limit_usd?: number;      // optional user-supplied $ cap for the cycle
     note: string;            // explicit unverified/estimate caveat copy
-  };
-  /** B4 — OPTIONAL + additive. 5-hour rolling-window reconstruction (ccusage-faithful boundaries).
-   *  ESTIMATE: built from THIS machine's Claude Code timestamps only — a LOWER BOUND on the real
-   *  account-shared window, NOT a quota reading (shows activity, never % of a limit). As of the last
-   *  generate. Absent → panel hidden (no fabrication). Honest complement to "on a plan, so $ is FYI". */
-  billing_windows?: {
-    generated_at_ms: number;     // == Date.parse(meta.generated_at); anchors is_active + countdown
-    window_count: number;        // total windows over the corpus (all non-empty by construction)
-    total_active_min: number;    // Σ active_min across ALL windows
-    pace_vs_busiest_pct: number; // current.active_min / busiest.active_min, guarded 0..100 (0 if busiest=0)
-    current: BillingWindow;      // most-recent window (is_active flags whether still live)
-    busiest: BillingWindow;      // max active_min — the pace reference
-    recent: BillingWindow[];     // last ~12 windows, most-recent first
-    note: string;                // honest caveat copy
   };
   /** context-police savings over time — optional/additive (panel hidden when absent). */
   catalog_savings?: CatalogSavings;
