@@ -644,6 +644,8 @@ footer .fnote{max-width:620px;line-height:1.7}footer b{color:var(--ink-dim)}
 
 /* B4 — 5-hour rolling-window panel (ported from dashboard.css; the redesign reuses
    <BillingWindows> on the Timeline tab and these classes weren't in the ported sheet). */
+.bw-lead { font-size: .82rem; color: var(--ink-dim); line-height: 1.5; margin: 0 0 14px; max-width: 660px; }
+.bw-lead b { color: var(--ink); }
 .bw-grid { display: flex; gap: 28px; flex-wrap: wrap; }
 .bw-stat { min-width: 170px; }
 .bw-big { font-size: 1.8rem; font-weight: 700; color: var(--amber); line-height: 1.1; }
