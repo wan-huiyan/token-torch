@@ -53,6 +53,24 @@ function shippedShort(s: Shipped): string | undefined {
   return undefined;
 }
 
+/** #2 — total count of REAL shipped outputs for the contribution calendar:
+ *  PRs + nested commits + nested reviews + top-level reviews + direct commits + skills + ADRs.
+ *  Returns 0 when nothing shipped (callers omit shipped_count then). */
+function shippedCount(s: Shipped): number {
+  const prs = s.prs ?? [];
+  const nestedCommits = prs.reduce((n, pr) => n + (pr.commits?.length ?? 0), 0);
+  const nestedReviews = prs.reduce((n, pr) => n + (pr.reviews?.length ?? 0), 0);
+  return (
+    prs.length +
+    nestedCommits +
+    nestedReviews +
+    (s.reviews?.length ?? 0) +
+    (s.commits?.length ?? 0) +
+    (s.skills?.length ?? 0) +
+    (s.adrs?.length ?? 0)
+  );
+}
+
 /** A cctime/usage-tracking record's own stored $ estimate, whichever schema it has.
  *  These figures use a DIFFERENT extraction method (and may be stale per the
  *  pricing lesson) — surfaced as a reconciliation note, never blended in. */
@@ -235,6 +253,7 @@ export function mapDashboard(
       ...(rec.startedAtMs != null ? { start_ts: new Date(rec.startedAtMs).toISOString() } : {}),
       ...(rec.headline ? { headline: rec.headline } : {}),
       ...(shipped ? (() => { const ss = shippedShort(shipped); return ss ? { shipped_short: ss } : {}; })() : {}),
+      ...(shipped ? (() => { const sc = shippedCount(shipped); return sc > 0 ? { shipped_count: sc } : {}; })() : {}),
       active_breakdown: detail.time.active_breakdown,
     });
   }
