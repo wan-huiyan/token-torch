@@ -22,7 +22,7 @@
  * for free — breakdownGroups already excludes mixed for the model dim + carries
  * per-group context.
  * ========================================================================== */
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { DashboardData, SessionRow } from "../../types";
 import { useWindow } from "../useWindow";
 import { breakdownGroups, bucketOf, isMixedVersion, type GroupBy } from "../aggregate";
@@ -285,7 +285,11 @@ function Heatmap({ sessions }: { sessions: SessionRow[] }) {
             </div>
           ))}
           {models.map((mv) => (
-            <div key={mv} style={{ display: "contents" }}>
+            // #51-followup: Fragment (no wrapper element) so .hcr + .hc are TRUE direct
+            // grid children. The previous `<div style={{display:"contents"}}>` collapses
+            // the row to nothing on engines that don't promote display:contents grid items
+            // (older Safari) → the whole heatmap renders empty there.
+            <Fragment key={mv}>
               <div className="hcr" style={{ ["--mc" as string]: modelColor(mv) }}>
                 {prettyModelId(mv)}
               </div>
@@ -306,7 +310,7 @@ function Heatmap({ sessions }: { sessions: SessionRow[] }) {
                   />
                 );
               })}
-            </div>
+            </Fragment>
           ))}
         </div>
         <div className="tl-cap" style={{ marginTop: 16 }}>
