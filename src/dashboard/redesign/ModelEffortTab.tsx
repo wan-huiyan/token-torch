@@ -254,7 +254,7 @@ function Heatmap({ sessions }: { sessions: SessionRow[] }) {
       <div className="heatwrap">
         <div className="sctrl" style={{ marginBottom: 18 }}>
           <span className="ctrl-lab">metric</span>
-          <div className="toggle wrap">
+          <div className="toggle flexwrap">
             {(
               [
                 ["cost", "Total cost"],
