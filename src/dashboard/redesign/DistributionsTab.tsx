@@ -755,7 +755,10 @@ function OverheadPanel({ data }: { data: DashboardData }) {
 
 function CatalogSavingsPanel({ data }: { data: DashboardData }) {
   const cs = data.catalog_savings;
-  if (!cs || cs.daily.length < 2) {
+  // The forward savings series is only meaningful once >= 2 snapshot days exist (one per `generate`
+  // run on a different day). `daily` is one row per corpus session-day (hundreds), so gate on the
+  // real snapshot count, not daily.length — otherwise the "collecting" state is unreachable.
+  if (!cs || cs.snapshot_count < 2 || cs.daily.length < 2) {
     return cs ? (
       <div className="ovpanel">
         <div className="ov-head">

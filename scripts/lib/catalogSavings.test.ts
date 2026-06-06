@@ -27,6 +27,7 @@ check("deriveCatalogSavings: hold-last per-injection × daily injections; cumula
   assert.equal(cs.daily[1].observed_floor, 0);
   assert.equal(cs.daily[2].observed_floor, 20000);
   assert.equal(cs.cumulative_tokens, 13000);
+  assert.equal(cs.snapshot_count, 2); // two distinct snapshot days
   assert.equal(cs.hidden_count, 436);
   assert.equal(cs.total_skills, 910);
   assert.equal(cs.per_injection_tokens, 2000);
@@ -38,6 +39,7 @@ check("deriveCatalogSavings: hold-last per-injection × daily injections; cumula
 check("deriveCatalogSavings: empty snapshots → empty daily, zero headline (panel hides)", () => {
   const cs = deriveCatalogSavings([], new Map(), new Map(), undefined);
   assert.deepEqual(cs.daily, []);
+  assert.equal(cs.snapshot_count, 0);
   assert.equal(cs.cumulative_tokens, 0);
   assert.equal(cs.hidden_count, 0);
   assert.equal(cs.per_injection_tokens, 0);

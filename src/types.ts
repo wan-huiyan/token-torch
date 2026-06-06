@@ -69,11 +69,12 @@ export interface CatalogFlipMarker {
  *  All-time per-day series (not windowed, mirroring the OverheadPanel precedent). ESTIMATE. */
 export interface CatalogSavings {
   daily: { date: string; est_saving_tokens: number; observed_floor: number }[];
+  snapshot_count: number;        // distinct snapshot days captured so far (the forward series needs >= 2)
   cumulative_tokens: number;     // Σ est_saving_tokens since the first snapshot
   hidden_count: number;          // latest snapshot
   total_skills: number;          // latest snapshot
   per_injection_tokens: number;  // latest snapshot (bare-name floor of hidden skills)
-  est_usd: number;               // cumulative_tokens priced at the cache-read rate (upper bound)
+  est_usd: number;               // cumulative_tokens priced at the cache-read rate (cache reads are the cheapest tier)
   flip_marker?: CatalogFlipMarker;
   note: string;                  // honest caveat copy
 }

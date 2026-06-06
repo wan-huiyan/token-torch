@@ -29,7 +29,7 @@ export function deriveCatalogSavings(
 ): CatalogSavings {
   if (snaps.length === 0) {
     return {
-      daily: [], cumulative_tokens: 0, hidden_count: 0, total_skills: 0,
+      daily: [], snapshot_count: 0, cumulative_tokens: 0, hidden_count: 0, total_skills: 0,
       per_injection_tokens: 0, est_usd: 0, flip_marker, note: CATALOG_SAVINGS_NOTE,
     };
   }
@@ -48,6 +48,7 @@ export function deriveCatalogSavings(
   const est_usd = round2((cumulative_tokens * ratesForModel("opus").cache_read) / 1_000_000);
   return {
     daily,
+    snapshot_count: sorted.length,
     cumulative_tokens,
     hidden_count: latest.hidden_count,
     total_skills: latest.total_skills,
