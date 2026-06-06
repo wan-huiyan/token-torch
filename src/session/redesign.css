@@ -362,7 +362,9 @@ canvas.mascot{image-rendering:pixelated;cursor:pointer;animation:botbob 2.6s eas
 .otag.adr{color:var(--amber);border:1px solid oklch(0.83 0.155 78 / .4)}
 .otag.skill{color:var(--magenta);border:1px solid oklch(0.74 0.19 350 / .4)}
 .otag.rev{color:var(--cyan);border:1px solid oklch(0.83 0.145 210 / .4)}
-.otherpanel .oempty{font-size:.76rem;color:var(--ink-faint);line-height:1.55;padding:6px 0;text-wrap:pretty}
+/* de-scoped from `.otherpanel .oempty` so the PULL REQUESTS (.prpanel) empty state
+   is styled too (#54); + mono font to match the pixel/mono aesthetic. */
+.oempty{font-family:var(--mono);font-size:.76rem;color:var(--ink-faint);line-height:1.55;padding:6px 0;text-wrap:pretty}
 
 /* takeaway */
 .takeaway{margin-top:32px;border:1px solid var(--line);border-radius:18px;padding:26px;background:linear-gradient(135deg,oklch(0.21 0.04 280),oklch(0.16 0.02 220));font-size:clamp(1.1rem,2.6vw,1.45rem);font-weight:600;line-height:1.45;text-wrap:balance}
