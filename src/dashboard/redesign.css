@@ -119,7 +119,9 @@ canvas.moon-cv{image-rendering:pixelated;vertical-align:-4px;margin-left:6px;ani
 .tile:hover #stSessionsIco canvas,.tile:hover #stProjectsIco canvas{animation-duration:.7s}
 .tile .ts{font-family:var(--mono);font-size:.64rem;color:var(--ink-faint);margin-top:4px}
 .tile.gauge{display:flex;align-items:center;gap:14px}
-.gauge svg{width:84px;height:84px;flex:none;overflow:visible}
+.gauge svg{width:62px;height:62px;flex:none;overflow:visible}/* #50: shrink the donut (was 84px) so the text column gets ~78px — enough for "94.7%" to fit unclipped */
+.gauge .gtxt{min-width:0}/* #50: let the text column shrink in the flex row so the value can't spill past the tile edge */
+.gauge .gtxt .tl{padding-right:0}/* #50: the 42px reservation clears .tile-ico, which the gauge tile doesn't have — reclaim it so the label fits on 2 lines, not 3 */
 .gauge .gtxt .tv{font-size:1.55rem;color:var(--lime)}
 .garc{animation:garcGlow 2.6s ease-in-out infinite}
 @keyframes garcGlow{0%,100%{filter:drop-shadow(0 0 5px oklch(0.88 0.205 135 / .7))}50%{filter:drop-shadow(0 0 12px oklch(0.88 0.205 135 / .95))}}
