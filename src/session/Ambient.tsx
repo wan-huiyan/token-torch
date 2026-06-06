@@ -37,7 +37,10 @@ export function Ambient() {
               top: `${s.top}%`,
               animationDelay: `${s.delay}s`,
               background: s.color,
-              ...(reduced ? { animation: "none", opacity: 0.5 } : {}),
+              // #44: use the LONGHAND `animationName` (not the `animation` shorthand) so it
+              // doesn't clash with the longhand `animationDelay` above — mixing shorthand +
+              // longhand across re-renders made React flood the console on a runtime motion flip.
+              ...(reduced ? { animationName: "none", opacity: 0.5 } : {}),
             }}
           />
         ))}
