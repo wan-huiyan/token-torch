@@ -62,11 +62,11 @@ function Shell({ data, onOpenSession, initialTab }: { data: DashboardData; onOpe
     <div className="wrap">
       <Topbar data={data} />
       <Ticker data={data} />
+      <WindowControl data={data} />
       <Hero data={data} />
       <StatStrip data={data} />
       <Podium data={data} />
       <AwardsPanel />
-      <WindowControl data={data} />
 
       <nav className="tabbar" role="tablist" aria-label="dashboard views">
         {TABS.map((t) => (
