@@ -473,6 +473,12 @@ export function mountOwl(host: HTMLElement, scale = 4): () => void {
   };
 }
 
+// palm tree (Weekend Protector) — the beach/sun/waves live in the card bg scene
+const PALM: Frame = [".....F.F.....", "..F..FFF..F..", ".FFD.FFF.DFF.", "FFFFFFFFFFFFF", ".FFD.FTF.DFF.", "...C..T..C...", "......T......", "......T......", "......T......", ".....T.......", ".....T.......", "....T........"];
+const PALM_PAL: Palette = { F: "#5fd23a", D: "#3f9e26", T: "#b07a2e", C: "#7c4a23" };
+// calendar (Weekend Check-In) — amber month-bar, white page, weekend cells in red
+const CAL: Frame = ["..K...K..", ".KKKKKKK.", ".KAAAAAK.", ".KWWWWWK.", ".KWWWWWK.", ".KWWWRRK.", ".KWWWRRK.", ".KKKKKKK.", "........."];
+const CAL_PAL: Palette = { K: "#0c0e14", A: "#ffb43d", W: "#f4f5f8", D: "#9aa0b4", R: "#ff6a2b" };
 type IconDef = readonly [Frame, Palette];
 const ICONS = {
   coin: [COIN, PAL.coin] as IconDef,
@@ -487,6 +493,8 @@ const ICONS = {
   wrench: [WRENCH, WRENCH_PAL] as IconDef,
   money: [MONEY, MONEY_PAL] as IconDef,
   folder: [FOLDER, FOLDER_PAL] as IconDef,
+  palm: [PALM, PALM_PAL] as IconDef,
+  calendar: [CAL, CAL_PAL] as IconDef,
 };
 type IconName = keyof typeof ICONS;
 
@@ -784,6 +792,231 @@ export function mountEmberRise(host: HTMLElement, tier?: FlameTier): () => void 
     window.clearInterval(iv);
     untrack();
   };
+}
+
+/* ---- baby-bot swarm background (Subagent Swarm) -------------------------- */
+// Tiny scurrying cyan bots that bob across the whole card behind the content.
+const BABY_A: Frame = ["..A..", "CCCCC", "CKCKC", "CCCCC", "K...K"];
+const BABY_B: Frame = ["..A..", "CCCCC", "CKCKC", "CCCCC", ".K.K."];
+const BABY_PAL: Palette = { A: "#ff5ad0", C: "#2ee6ff", K: "#0c0e14" };
+type SwarmBot = { x: number; y: number; vx: number; dir: number; fr: number; ft: number; bob: number; turnT: number };
+/** Mounts a baby-bot swarm canvas behind `host` (driven by setInterval — NOT rAF —
+ *  so it keeps animating in a backgrounded/offscreen tab and never blanks on print).
+ *  Cleanup: stop interval + listener, remove canvas. */
+export function mountSwarm(host: HTMLElement, opts: { count?: number; scale?: number } = {}): () => void {
+  const count = opts.count ?? 11;
+  const scale = opts.scale ?? 3;
+  const fA = spriteCanvas([BABY_A], BABY_PAL, scale);
+  const fB = spriteCanvas([BABY_B], BABY_PAL, scale);
+  const bw = fA.width, bh = fA.height;
+  const cv = document.createElement("canvas");
+  cv.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5";
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  host.insertBefore(cv, host.firstChild);
+  const ctx = cv.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+  let w = 0, h = 0;
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  function size(): void {
+    const r = host.getBoundingClientRect();
+    w = r.width || 480; h = r.height || 360;
+    cv.width = w * DPR; cv.height = h * DPR; cv.style.width = w + "px"; cv.style.height = h + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
+  }
+  size();
+  const bots: SwarmBot[] = [];
+  for (let i = 0; i < count; i++) {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    bots.push({ x: rnd(0, Math.max(1, w - bw)), y: rnd(h * 0.12, Math.max(h * 0.12 + 1, h - bh - 4)),
+      vx: dir * rnd(0.35, 1.15), dir, fr: Math.random() < 0.5 ? 0 : 1, ft: rnd(0, 140), bob: rnd(0, 6.28), turnT: rnd(40, 180) });
+  }
+  function draw(b: SwarmBot, now: number): void {
+    const yb = b.y + Math.sin(b.bob + now * 0.006) * 2;
+    const img = b.fr ? fB : fA;
+    ctx.save();
+    if (b.dir < 0) { ctx.translate(b.x + bw, yb); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0); }
+    else { ctx.drawImage(img, b.x, yb); }
+    ctx.restore();
+  }
+  function step(dt: number, now: number): void {
+    ctx.clearRect(0, 0, w, h);
+    for (const b of bots) {
+      b.x += b.vx * (dt / 16);
+      if (b.x < -bw) b.x = w;
+      if (b.x > w) b.x = -bw;
+      if ((b.turnT -= 1) <= 0) { if (Math.random() < 0.4) { b.dir *= -1; b.vx = b.dir * Math.abs(b.vx); } b.turnT = rnd(60, 220); }
+      if ((b.ft += dt) > 130) { b.ft = 0; b.fr ^= 1; }
+      draw(b, now);
+    }
+  }
+  step(16, performance.now()); // initial static frame — never blank (print / throttled tabs)
+  let iv: number | undefined;
+  let untrack: (() => void) | undefined;
+  if (!isReduced()) {
+    iv = window.setInterval(() => step(33, performance.now()), 33);
+    untrack = trackAnimation(() => { if (iv) { window.clearInterval(iv); iv = undefined; } });
+  }
+  const onResize = () => { size(); step(16, performance.now()); };
+  window.addEventListener("resize", onResize);
+  return () => {
+    if (iv) window.clearInterval(iv);
+    untrack?.();
+    window.removeEventListener("resize", onResize);
+    cv.remove();
+  };
+}
+
+/* ---- beach scene background (Weekend Protector) -------------------------- */
+/** Mounts a pixel beach behind `host`: a breathing sun (upper-left), rolling sea
+ *  waves with foam, and a speckled sand shore. setInterval-driven (frozen-safe).
+ *  Cleanup: stop interval + listener, remove canvas. */
+export function mountBeachScene(host: HTMLElement): () => void {
+  const reduced = isReduced();
+  const cv = document.createElement("canvas");
+  cv.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.4";
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  host.insertBefore(cv, host.firstChild);
+  const ctx = cv.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  let w = 0, h = 0;
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  function size(): void {
+    const r = host.getBoundingClientRect();
+    w = r.width || 480; h = r.height || 400;
+    cv.width = w * DPR; cv.height = h * DPR; cv.style.width = w + "px"; cv.style.height = h + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
+  }
+  size();
+  const CELL = 5;
+  const SAND = "#e6c382", SAND2 = "#d8b06a";
+  const SEA = "#2ea3c4", SEA2 = "#3ec8e0", FOAM = "#bff0ff";
+  const SUN1 = "#ffe14d", SUN2 = "#ffb43d";
+  const q = (n: number) => Math.round(n / CELL) * CELL;
+  function draw(t: number): void {
+    ctx.clearRect(0, 0, w, h);
+    const sx = w * 0.16, sy = h * 0.17;
+    const R = Math.max(16, w * 0.052) * (reduced ? 1 : (1 + 0.04 * Math.sin(t * 0.002)));
+    const Ri = R * 0.62;
+    for (let yy = -R; yy < R; yy += CELL)
+      for (let xx = -R; xx < R; xx += CELL) {
+        const d2 = xx * xx + yy * yy;
+        if (d2 <= R * R) { ctx.fillStyle = d2 <= Ri * Ri ? SUN1 : SUN2; ctx.fillRect(q(sx + xx), q(sy + yy), CELL, CELL); }
+      }
+    const sandH = Math.max(22, h * 0.10);
+    const seaTop = h - sandH - Math.max(20, h * 0.10);
+    for (let x = 0; x < w; x += CELL) {
+      const top = seaTop + Math.sin(x * 0.03 + t * 0.006) * 8 + Math.sin(x * 0.072 + t * 0.009) * 3.5;
+      for (let y = q(top); y < h - sandH; y += CELL) {
+        const foam = y < top + CELL * 1.6;
+        ctx.fillStyle = foam ? FOAM : (((x / CELL | 0) + (y / CELL | 0)) % 6 === 0 ? SEA2 : SEA);
+        ctx.fillRect(x, y, CELL, CELL);
+      }
+    }
+    for (let x = 0; x < w; x += CELL) {
+      const shore = (h - sandH) + Math.sin(x * 0.04 + t * 0.003) * 3;
+      for (let y = q(shore); y < h; y += CELL) {
+        ctx.fillStyle = (((x / CELL | 0) * 7 + (y / CELL | 0) * 3) % 9 === 0) ? SAND2 : SAND;
+        ctx.fillRect(x, y, CELL, CELL);
+      }
+    }
+  }
+  let t0 = 0;
+  let iv: number | undefined;
+  let untrack: (() => void) | undefined;
+  draw(0);
+  if (!reduced) {
+    iv = window.setInterval(() => { t0 += 33; draw(t0); }, 60);
+    untrack = trackAnimation(() => { if (iv) { window.clearInterval(iv); iv = undefined; } });
+  }
+  const onResize = () => { size(); draw(t0); };
+  window.addEventListener("resize", onResize);
+  return () => {
+    if (iv) window.clearInterval(iv);
+    untrack?.();
+    window.removeEventListener("resize", onResize);
+    cv.remove();
+  };
+}
+
+/* ---- one-shot confetti burst (pixel squares) — the "winner!" moment ------- */
+type ConfettiP = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; grav: number; spin: number; rot: number; tw: number };
+/** Fires a single pixel-square confetti burst inside `host` (rAF; self-terminates
+ *  when all particles die). No-ops under reduce-motion; a runtime flip-to-reduce
+ *  cancels an in-flight burst. */
+export function confettiBurst(opts: { host?: HTMLElement | null; count?: number; x?: number; y?: number; colors?: string[] } = {}): void {
+  if (isReduced() || !opts.host) return;
+  const host = opts.host;
+  const colors = opts.colors || ["#2ee6ff", "#b6ff3d", "#ff5ad0", "#ffe14d", "#ffffff"];
+  const count = opts.count || 90;
+  const cv = document.createElement("canvas");
+  cv.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:40";
+  const rect = host.getBoundingClientRect();
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  const W = rect.width, H = rect.height;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  host.appendChild(cv);
+  const ctx = cv.getContext("2d")!;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+  const ox = opts.x != null ? opts.x : W / 2;
+  const oy = opts.y != null ? opts.y : H * 0.34;
+  const P: ConfettiP[] = [];
+  for (let i = 0; i < count; i++) {
+    const a = rnd(-Math.PI * 0.95, -Math.PI * 0.05);
+    const sp = rnd(3, 9.5);
+    P.push({ x: ox + rnd(-18, 18), y: oy + rnd(-8, 8), vx: Math.cos(a) * sp + rnd(-1.2, 1.2), vy: Math.sin(a) * sp - rnd(1, 3),
+      life: 0, max: rnd(60, 120), size: (Math.random() * 2 | 0) + 3, color: colors[(Math.random() * colors.length) | 0],
+      grav: rnd(0.10, 0.18), spin: rnd(-0.3, 0.3), rot: rnd(0, 6.28), tw: rnd(0, 6.28) });
+  }
+  let raf = 0, stopped = false;
+  let untrack: (() => void) | undefined;
+  const done = () => { stopped = true; cancelAnimationFrame(raf); untrack?.(); cv.remove(); };
+  const tick = () => {
+    if (stopped) return;
+    ctx.clearRect(0, 0, W, H);
+    let alive = 0;
+    for (let i = P.length - 1; i >= 0; i--) {
+      const p = P[i]; p.life++; p.vy += p.grav; p.vx *= 0.992; p.x += p.vx; p.y += p.vy; p.rot += p.spin;
+      if (p.life >= p.max || p.y > H + 20) { P.splice(i, 1); continue; }
+      alive++;
+      const tt = 1 - p.life / p.max, tw = 0.55 + 0.45 * Math.sin(p.tw + p.life * 0.4);
+      ctx.globalAlpha = Math.max(0, tt) * tw;
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 7;
+      const s = p.size * (0.7 + tt * 0.7);
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-s / 2, -s / 2, s, s); ctx.restore();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    if (alive > 0) raf = requestAnimationFrame(tick);
+    else done();
+  };
+  raf = requestAnimationFrame(tick);
+  untrack = trackAnimation(done);
+}
+
+/* ---- generic dispatcher used by the awards panel's <Sprite> hosts -------- */
+/** Mount a sprite by string key (mirrors the prototype's SpriteKit.mountKind).
+ *  Animated kinds (mascot/owl/family/flame/podium bots) self-gate on isReduced();
+ *  everything else falls through to a static pixel icon. Returns a cleanup fn. */
+export function mountKind(host: HTMLElement, kind: string, opts: { scale?: number; tier?: string } = {}): () => void {
+  const { scale, tier } = opts;
+  switch (kind) {
+    case "mascot": return mountMascot(host, scale);
+    case "owl": return mountOwl(host, scale);
+    case "family": return mountFamily(host, scale);
+    case "flame": return mountFlame(host, scale, tier as FlameTier | undefined);
+    case "evil":
+    case "cool":
+    case "nervous":
+      return mountPodiumBot(host, kind, scale);
+    default: {
+      const cv = mountIcon(host, kind as IconName, scale);
+      return () => cv?.remove();
+    }
+  }
 }
 
 /** Same surface as the source's `root.TT.sprites` — the raw single-frame grids. */
