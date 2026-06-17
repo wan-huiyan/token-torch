@@ -167,6 +167,10 @@ export interface DashboardData {
    *  only severity-tagged findings in reviews' final verdicts; most reviews write
    *  findings as prose and are `unknown` (reviews_total − reviews_parsed). */
   review_findings?: ReviewFindingsSummary;
+  /** #75 — optional/additive. "What's driving your usage" characteristics (mirrors the
+   *  native /usage breakdown). Independent characteristics, NOT a sum-to-100 breakdown;
+   *  per-skill/MCP attribution is unknown. Panel hidden when absent. */
+  usage_diagnostics?: UsageDiagnostics;
 }
 
 export interface ReviewFindingsSummary {
@@ -175,6 +179,22 @@ export interface ReviewFindingsSummary {
   reviews_parsed: number;        // reviews that yielded a tagged count
   reviews_total: number;         // all review subagents seen (parsed + unknown)
   note: string;                  // explicit high-precision-floor / partial-coverage caveat
+}
+
+export interface UsageDriver {
+  key: "subagents" | "heavy_context" | "parallel" | "attribution";
+  label: string;
+  share_pct: number | null;      // % for this characteristic; null = genuinely UNKNOWN (never faked)
+  detail: string;                // plain-English measured detail (carries the real numbers)
+  nudge: string;                 // an action you can take (native-/usage nudge style)
+}
+
+export interface UsageDiagnostics {
+  drivers: UsageDriver[];
+  peak_concurrency: number;        // max simultaneous active sessions (gap-capped)
+  parallel_threshold: number;      // the "heavily parallel" cutoff (e.g. 4)
+  heavy_context_threshold: number; // the "large context" cutoff in tokens (e.g. 150000)
+  note: string;                    // local-only undercount + characteristics-not-breakdown caveat
 }
 
 export interface ProjectRow {

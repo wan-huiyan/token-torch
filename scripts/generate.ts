@@ -173,6 +173,26 @@ function verify(
     throw new Error(`rows carry mistakes_caught (Σ=${rfRowSum}) but dashboard.review_findings is absent`);
   }
 
+  // #75 usage-diagnostics contract: each driver's share is null (honest unknown) or a
+  // real 0–100 percentage (never a fabricated >100 or negative); attribution stays unknown;
+  // thresholds + peak concurrency are sane. Independent characteristics — they do NOT sum to 100.
+  const ud = dashboard.usage_diagnostics;
+  if (ud) {
+    for (const dr of ud.drivers) {
+      if (dr.share_pct !== null && !(dr.share_pct >= 0 && dr.share_pct <= 100))
+        throw new Error(`usage_diagnostics driver "${dr.key}" share_pct must be null or 0–100, got ${dr.share_pct}`);
+    }
+    const attr = ud.drivers.find((d) => d.key === "attribution");
+    if (!attr || attr.share_pct !== null)
+      throw new Error(`usage_diagnostics: per-skill/MCP attribution must stay unknown (share_pct=null), got ${attr?.share_pct}`);
+    if (ud.peak_concurrency < 0 || ud.parallel_threshold < 1 || ud.heavy_context_threshold < 1)
+      throw new Error(`usage_diagnostics thresholds/peak out of range`);
+    checks.push(
+      `✓ usage_diagnostics: ${ud.drivers.length} characteristics, shares valid (0–100 or unknown); ` +
+        `attribution unknown; peak concurrency ${ud.peak_concurrency}`,
+    );
+  }
+
   // cost_by_fidelity sums to the grand total.
   const fid = Math.round((dashboard.totals.cost_by_fidelity.high + dashboard.totals.cost_by_fidelity.main_loop) * 100);
   if (fid !== Math.round(dashboard.totals.cost_usd * 100))

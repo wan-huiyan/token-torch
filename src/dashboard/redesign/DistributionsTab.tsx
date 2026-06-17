@@ -859,6 +859,45 @@ function CatalogSavingsPanel({ data }: { data: DashboardData }) {
 }
 
 /* ============================================================================
+ * PANEL — "What's driving your usage" (#75): the native /usage limits breakdown,
+ * derived from the local corpus. INDEPENDENT CHARACTERISTICS, not a sum-to-100
+ * breakdown, and not a judgment. Per-skill/MCP attribution is honestly unknown.
+ * ========================================================================== */
+function UsageDiagnosticsPanel({ data }: { data: DashboardData }) {
+  const ud = data.usage_diagnostics;
+  const { isAll } = useWindow();
+  if (!ud || !ud.drivers.length) return null;
+  return (
+    <div className="ovpanel">
+      <div className="ov-head">
+        <h4>What&apos;s driving your usage</h4>
+        <span>independent characteristics, not a breakdown · all-time{!isAll && " (not windowed)"}</span>
+      </div>
+      <div className="ud-grid">
+        {ud.drivers.map((dr) => (
+          <div className="ud-card" key={dr.key}>
+            <div className="ud-top">
+              <div className="ud-label">{dr.label}</div>
+              <div className={"ud-share" + (dr.share_pct === null ? " unknown" : "")}>
+                {dr.share_pct === null ? "unknown" : pct(dr.share_pct, 1)}
+              </div>
+            </div>
+            <div className="ud-detail">{dr.detail}</div>
+            <div className="ud-nudge">
+              <span className="ud-arrow" aria-hidden>
+                →
+              </span>{" "}
+              {dr.nudge}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="tl-cap">{ud.note}</div>
+    </div>
+  );
+}
+
+/* ============================================================================
  * Tab root
  * ========================================================================== */
 
@@ -869,6 +908,7 @@ export function DistributionsTab({ data }: { data: DashboardData }) {
       <ComputePanel sessions={sessions} />
       <WhenPanel sessions={sessions} />
       <OverheadPanel data={data} />
+      <UsageDiagnosticsPanel data={data} />
       <CatalogSavingsPanel data={data} />
     </>
   );
