@@ -33,7 +33,12 @@ import { buildInsightsLLM } from "./lib/insightsLlm";
 import { buildInsightsRequest, INSIGHTS_PROMPT_VERSION } from "./lib/insightsPrompt";
 import { loadAgentInsights } from "./lib/insightsAgent";
 import { insightsHash, readInsightsCache, writeInsightsCache } from "./lib/insightsCache";
-import { validateInsightNumbers } from "./lib/insightsValidate";
+import { validateInsightNumbers, validateSessionTakeaway } from "./lib/insightsValidate";
+import {
+  selectTakeawaySessions,
+  buildSessionTakeawaysRequest,
+  loadSessionTakeaways,
+} from "./lib/sessionTakeaways";
 import { readSkillsDir, computeSnapshot, appendSnapshot, loadSnapshots, DEFAULT_SNAPSHOT_PATH, DEFAULT_SKILLS_DIR } from "./lib/catalogSnapshot";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +51,8 @@ const INSIGHTS_CACHE_PATH = join(ROOT, ".cache", "insights.json");
 const INSIGHTS_MODEL = "claude-opus-4-8";
 const INSIGHTS_REQUEST_PATH = join(ROOT, "insights-request.md");
 const AGENT_INSIGHTS_PATH = join(ROOT, "insights.local.md");
+const SESSION_TAKEAWAYS_REQUEST_PATH = join(ROOT, "session-takeaways-request.md");
+const SESSION_TAKEAWAYS_PATH = join(ROOT, "session-takeaways.local.md");
 const VERIFY = process.argv.includes("--verify");
 const PRUNE_ORPHANS = process.argv.includes("--prune-orphans"); // #22 — opt-in destructive prune
 
@@ -421,6 +428,30 @@ function verify(
     checks.push(`✓ insights are template/none — no-fabrication check is a no-op`);
   }
 
+  // #52 — same belt-and-suspenders for per-session AI takeaways, against EACH session's OWN
+  // whitelist (a number from another session is fabrication here). main() bakes only validated
+  // notes; this independent re-check fails the build if that guarantee ever breaks.
+  const aiTakeaways = details.filter(
+    (d) => (d.takeaway_source === "agent" || d.takeaway_source === "llm") && d.takeaway_md,
+  );
+  for (const d of aiTakeaways) {
+    const { ok, offending, claims } = validateSessionTakeaway(d.takeaway_md as string, d);
+    if (!ok) {
+      const why = [
+        offending.length ? `number(s) absent from session ${d.id}'s aggregates: ${offending.join(", ")}` : "",
+        claims.length ? `forbidden superlative/comparison/causal phrase(s): ${claims.join(", ")}` : "",
+      ].filter(Boolean).join("; ");
+      throw new Error(
+        `${d.takeaway_source} takeaway for session ${d.id} contains ${why} — no fabricated number or unsupported value judgment may ship.`,
+      );
+    }
+  }
+  checks.push(
+    aiTakeaways.length
+      ? `✓ ${aiTakeaways.length} agent/llm session takeaway(s) pass the per-session no-fabrication check`
+      : `✓ session takeaways are template/none — per-session no-fabrication check is a no-op`,
+  );
+
   return checks;
 }
 
@@ -463,6 +494,14 @@ async function main(): Promise<void> {
   writeFileSync(INSIGHTS_REQUEST_PATH, buildInsightsRequest(base.dashboard));
   console.log("Insights: wrote insights-request.md — paste it to your agent (or run the token-torch-insights skill).");
 
+  // #52 — also emit the per-session takeaway request for a BOUNDED subset (top-cost ∪ recent), so
+  // the user's own agent can write AI takeaways with NO API key (same keyless handshake). Each note
+  // is re-validated below against THAT session's own number whitelist before it bakes.
+  const takeawayIds = new Set(selectTakeawaySessions(base.details));
+  const takeawaySelected = base.details.filter((d) => takeawayIds.has(d.id));
+  writeFileSync(SESSION_TAKEAWAYS_REQUEST_PATH, buildSessionTakeawaysRequest(takeawaySelected));
+  console.log(`Takeaways: wrote session-takeaways-request.md for ${takeawaySelected.length} session(s) (top-cost ∪ recent).`);
+
   // Resolve provenance in precedence order:
   //   1. agent-written insights.local.md present + passes the no-fabrication gate -> "agent"
   //   2. ANTHROPIC_API_KEY present -> LLM path -> "llm" (template on failure)
@@ -501,6 +540,30 @@ async function main(): Promise<void> {
   const { dashboard, details, subagentTiming } = insightsMd
     ? mapDashboard(ingest.records, overlay, generatedAt, floor, undefined, settingsFacts, insightsMd, insightsSource, catalogSnapshots)
     : base;
+
+  // #52 — bake validated per-session AI takeaways onto the final details. The gate is server-side
+  // (validateSessionTakeaway, run inside loadSessionTakeaways): any note citing a number absent from
+  // THAT session's whitelist is rejected → the session keeps the deterministic template Takeaway.
+  // takeaway_source is threaded explicitly ("agent"), never inferred from "prose is non-null".
+  {
+    const byId = new Map(details.map((d) => [d.id, d]));
+    const { accepted, rejected, unknown } = loadSessionTakeaways(SESSION_TAKEAWAYS_PATH, byId);
+    for (const d of details) {
+      const md = accepted.get(d.id);
+      if (md) {
+        d.takeaway_md = md;
+        d.takeaway_source = "agent";
+      }
+    }
+    if (accepted.size || rejected.length || unknown.length) {
+      console.log(
+        `Takeaways: ${accepted.size} agent-written (validated) baked` +
+          (rejected.length ? `, ${rejected.length} rejected → template (${rejected.map((r) => r.id).join(", ")})` : "") +
+          (unknown.length ? `, ${unknown.length} unknown id(s) ignored` : "") +
+          ".",
+      );
+    }
+  }
 
   writeJson(join(OUT_DIR, "dashboard.json"), dashboard);
   for (const d of details) writeJson(join(OUT_DIR, "sessions", `${d.id}.json`), d);

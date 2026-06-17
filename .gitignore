@@ -23,3 +23,6 @@ tt-*.png
 # your real project names + cost figures (derived) → never commit; regenerated each run.
 insights-request.md
 insights.local.md
+# Agent-handshake per-session takeaways (#52): same — real project names + per-session figures.
+session-takeaways-request.md
+session-takeaways.local.md

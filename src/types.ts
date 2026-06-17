@@ -301,6 +301,13 @@ export interface SessionDetailData {
   data_tier?: "enriched" | "jsonl" | "thin";
   /** Plan 8 / issue #10 — optional + additive; absent on older fixtures (panel hidden). */
   context_overhead?: ContextOverhead;
+  /** #52 — optional + additive. AI-written one-sentence Takeaway for this session, baked at
+   *  generate-time via the keyless agent handshake and re-validated against THIS session's own
+   *  number whitelist. Absent => Takeaway.tsx renders the deterministic template (honest fallback). */
+  takeaway_md?: string | null;
+  /** #52 — provenance of `takeaway_md`: "agent" (the user's own agent wrote it) / "llm" / "template".
+   *  Threaded explicitly (never inferred from "prose is non-null"), mirroring insights_source. */
+  takeaway_source?: "agent" | "llm" | "template";
 }
 
 export type CostCategory = "fresh_input" | "cache_write" | "cache_read" | "output";

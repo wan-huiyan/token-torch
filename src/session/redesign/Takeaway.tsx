@@ -11,7 +11,8 @@
  * ========================================================================== */
 import type { SessionDetailData } from "../../types";
 import { Sprite } from "../../dashboard/Sprite";
-import { mountMascot, confettiAround } from "../../dashboard/spriteEngine";
+import { mountMascot, confettiAround, mountIcon } from "../../dashboard/spriteEngine";
+import { mdInline } from "../../dashboard/helpers";
 import { pct } from "../helpers";
 import { mins } from "../../shared/mins";
 
@@ -20,32 +21,54 @@ export function Takeaway({ data }: { data: SessionDetailData }) {
   const read = data.cost.by_category?.cache_read;
   // active share of wall-clock — guard divide-by-zero (degrade: omit the %).
   const activeShare = t.wall_clock_min > 0 ? (t.active_min / t.wall_clock_min) * 100 : null;
+  // #52 — AI-written takeaway when present + validated; else the deterministic template below.
+  // Threaded provenance (never inferred from "prose is non-null"); the gen-time gate guarantees
+  // every number traces to THIS session, so the prose is rendered verbatim (inline-md, escaped).
+  const ai = data.takeaway_md && (data.takeaway_source === "agent" || data.takeaway_source === "llm");
 
   return (
     <div className="takeaway" id="takeaway" style={{ position: "relative" }}>
-      <div className="tk">Takeaway · session {data.id}</div>
-      This run spanned <b className="cy">{mins(t.wall_clock_min)}</b>
-      {activeShare != null ? (
-        <>
-          {" "}
-          but only <b className="li">{mins(t.active_min)}</b> ({pct(activeShare, 0)}) was real compute
-        </>
+      <div className="tk">
+        Takeaway · session {data.id}
+        {ai && (
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 8, textTransform: "none", letterSpacing: "normal" }}
+          >
+            <Sprite mount={(host) => void mountIcon(host, "star", 2)} />
+            {data.takeaway_source === "agent" ? "written by your agent" : "AI-written"}
+          </span>
+        )}
+      </div>
+      {ai ? (
+        // md() returns a trusted, HTML-escaped string (only <strong> re-introduced); the AI prose
+        // (incl. any emoji it wrote) renders verbatim — the gen-time gate already cleared its numbers.
+        <span dangerouslySetInnerHTML={{ __html: mdInline((data.takeaway_md as string).replace(/\n+/g, " ")) }} />
       ) : (
         <>
-          {" "}
-          but only <b className="li">{mins(t.active_min)}</b> was real compute
-        </>
-      )}
-      {read ? (
-        <>
-          . Cache hits ran at <b className="cy">{pct(data.tokens.cache_hit_pct, 0)}</b>, so cache reads
-          were <b className="mg">{pct(read.cost_pct, 0)}</b> of the bill despite being most of the tokens.
-          Cheap tokens, real money.
-        </>
-      ) : (
-        <>
-          . Cache hits ran at <b className="cy">{pct(data.tokens.cache_hit_pct, 0)}</b> — wall-clock is
-          not work, idle time costs nothing.
+          This run spanned <b className="cy">{mins(t.wall_clock_min)}</b>
+          {activeShare != null ? (
+            <>
+              {" "}
+              but only <b className="li">{mins(t.active_min)}</b> ({pct(activeShare, 0)}) was real compute
+            </>
+          ) : (
+            <>
+              {" "}
+              but only <b className="li">{mins(t.active_min)}</b> was real compute
+            </>
+          )}
+          {read ? (
+            <>
+              . Cache hits ran at <b className="cy">{pct(data.tokens.cache_hit_pct, 0)}</b>, so cache reads
+              were <b className="mg">{pct(read.cost_pct, 0)}</b> of the bill despite being most of the tokens.
+              Cheap tokens, real money.
+            </>
+          ) : (
+            <>
+              . Cache hits ran at <b className="cy">{pct(data.tokens.cache_hit_pct, 0)}</b> — wall-clock is
+              not work, idle time costs nothing.
+            </>
+          )}
         </>
       )}
       <Sprite
