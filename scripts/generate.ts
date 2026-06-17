@@ -163,11 +163,15 @@ function verify(
       throw new Error(`review_findings.sessions_with_findings (${rf.sessions_with_findings}) ≠ rows with mistakes_caught (${rfRowsWithCount})`);
     if (rf.reviews_parsed > rf.reviews_total)
       throw new Error(`review_findings.reviews_parsed (${rf.reviews_parsed}) > reviews_total (${rf.reviews_total}) — impossible coverage`);
-    if (rf.confirmed_total < 0 || rf.reviews_parsed < 0 || rf.reviews_total < 0)
+    if (rf.confirmed_total < 0 || rf.reviews_parsed < 0 || rf.reviews_total < 0 || rf.reviews_panel < 0)
       throw new Error(`review_findings counts must be non-negative`);
+    // floor sanity: a parsed review yielded ≥1 finding, so confirmed_total ≥ reviews_parsed
+    // (a confirmed count below the number of parsed reviews means the count was double-dropped).
+    if (rf.confirmed_total < rf.reviews_parsed)
+      throw new Error(`review_findings.confirmed_total (${rf.confirmed_total}) < reviews_parsed (${rf.reviews_parsed}) — every parsed review has ≥1 finding`);
     checks.push(
       `✓ review_findings consistent: ${rf.confirmed_total} confirmed across ${rf.sessions_with_findings} session(s); ` +
-        `${rf.reviews_parsed}/${rf.reviews_total} reviews parsed (rest unknown, not zero-filled)`,
+        `${rf.reviews_parsed}/${rf.reviews_total} foreground reviews parsed (${rf.reviews_panel} panel excluded; rest unknown, not zero-filled)`,
     );
   } else if (rfRowSum > 0) {
     throw new Error(`rows carry mistakes_caught (Σ=${rfRowSum}) but dashboard.review_findings is absent`);

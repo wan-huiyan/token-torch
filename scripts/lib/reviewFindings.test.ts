@@ -25,8 +25,31 @@ check("counts ### header findings", () => {
 check("counts list-item + ordered-list findings", () => {
   assert.equal(countConfirmedFindings("- [P1] a\n* [P3] b\n1. [P2] c"), 3);
 });
-check("counts bold-wrapped tagged header", () => {
-  assert.equal(countConfirmedFindings("### **[P0]** critical\n**[P1]** also"), 2);
+check("counts bold-wrapped tagged header (with a real title)", () => {
+  assert.equal(countConfirmedFindings("### **[P0]** crash on startup\n**[P1]** stale cache served"), 2);
+});
+check("does NOT count a severity-scale LEGEND line (the trap)", () => {
+  const legend = [
+    "## Severity scale",
+    "- [P0] = blocker, must fix before merge",
+    "- [P1]: important",
+    "- [P2] (nice to have)",
+    "### [P1] real timezone bug at file.ts:10",
+  ].join("\n");
+  assert.equal(countConfirmedFindings(legend), 1, "only the real finding counts, not the 3 legend rows");
+});
+check("does NOT count a findings-SUMMARY tally line (the trap)", () => {
+  const summary = [
+    "## Findings summary",
+    "- [P0]: 0 found",
+    "- [P1]: 2 confirmed",
+    "- [P2] — none",
+    "### [P2] actual confirmed nit at x.ts:3",
+  ].join("\n");
+  assert.equal(countConfirmedFindings(summary), 1, "tally rows are not confirmed findings");
+});
+check("a bare tag with no title is not a finding", () => {
+  assert.equal(countConfirmedFindings("### [P1]\n- [P2]   "), 0);
 });
 check("does NOT count inline-prose [Pn] mid-sentence", () => {
   assert.equal(countConfirmedFindings("This is a [P1] concern but only in passing."), 0);
@@ -97,7 +120,7 @@ check("end-to-end: foreground parsed, prose unknown, panel excluded, non-review 
   const subs = join(sessionDir, "subagents");
   mkdirSync(subs, { recursive: true });
   // A: foreground review, 2 tagged findings → parsed, confirmed +2
-  writeAgent(subs, "agent-aaa", { description: "Code review of PR #1" }, "### [P1] bug\n### [P2] nit");
+  writeAgent(subs, "agent-aaa", { description: "Code review of PR #1" }, "### [P1] timezone bug at x.ts:10\n### [P2] missing null check");
   // B: foreground review, prose verdict, NO tags → unknown (the scale text is in the PROMPT, not final msg)
   writeAgent(
     subs,
@@ -117,8 +140,9 @@ check("end-to-end: foreground parsed, prose unknown, panel excluded, non-review 
   const r = extractReviewFindings("abcd1234", index);
   assert.ok(r, "expected a ReviewFindings result");
   assert.equal(r!.confirmed, 2, "only A's 2 tagged findings are confirmed");
-  assert.equal(r!.reviews_parsed, 1, "only A parsed (B prose-unknown, D panel-unknown)");
-  assert.equal(r!.reviews_total, 3, "A + B + D are reviews; C is not");
+  assert.equal(r!.reviews_parsed, 1, "only A parsed (B prose-unknown)");
+  assert.equal(r!.reviews_total, 2, "foreground reviews ATTEMPTED = A + B (C not a review, D is panel)");
+  assert.equal(r!.reviews_panel, 1, "D is a panel reviewer — excluded from the denominator");
   rmSync(root, { recursive: true, force: true });
 });
 

@@ -171,6 +171,7 @@ export function mapDashboard(
   let rfSessionsWithFindings = 0;
   let rfReviewsParsed = 0;
   let rfReviewsTotal = 0;
+  let rfReviewsPanel = 0;
   // #75 usage-diagnostics per-session inputs (concurrency needs in-memory timestamps).
   const usageSessions: UsageSession[] = [];
 
@@ -184,6 +185,7 @@ export function mapDashboard(
       rfConfirmedTotal += reviewFindings.confirmed;
       rfReviewsParsed += reviewFindings.reviews_parsed;
       rfReviewsTotal += reviewFindings.reviews_total;
+      rfReviewsPanel += reviewFindings.reviews_panel;
       if (reviewFindings.confirmed > 0) rfSessionsWithFindings += 1;
     }
     const ov = overlay.get(rec.id);
@@ -494,13 +496,14 @@ export function mapDashboard(
     catalog_savings,
     // #72 — corpus-wide review-findings coverage for the calendar's 2nd stat. Present
     // only when at least one review subagent was seen anywhere (panel hidden otherwise).
-    ...(rfReviewsTotal > 0
+    ...(rfReviewsTotal > 0 || rfReviewsPanel > 0
       ? {
           review_findings: {
             confirmed_total: rfConfirmedTotal,
             sessions_with_findings: rfSessionsWithFindings,
             reviews_parsed: rfReviewsParsed,
             reviews_total: rfReviewsTotal,
+            reviews_panel: rfReviewsPanel,
             note: REVIEW_FINDINGS_NOTE,
           },
         }

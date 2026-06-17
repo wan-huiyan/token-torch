@@ -29,18 +29,23 @@ import { join, basename } from "node:path";
 
 /** Caveat copy for the dashboard's review_findings summary — names the floor honestly. */
 export const REVIEW_FINDINGS_NOTE =
-  "A high-precision floor. Counts only severity-tagged findings (`[P0]`–`[P3]`) in a " +
-  "review's final verdict. Most reviews write findings as prose, and panel reviewers' " +
-  "findings are adjudicated elsewhere — those are unknown, never counted as zero. The " +
-  "real number of mistakes caught is higher.";
+  "A high-precision floor. Counts only severity-tagged findings (`[P0]`–`[P3]`) in the " +
+  "final verdict of a single-agent review. reviews_parsed / reviews_total is coverage over " +
+  "the foreground reviews we ATTEMPT — reviews that write findings as prose are read but " +
+  "unparsed (unknown, never counted as zero). Panel per-reviewer transcripts (reviews_panel) " +
+  "are excluded entirely: their findings are adjudicated by the judge, not the reviewer. The " +
+  "real number of mistakes caught is higher than this floor.";
 
 export interface ReviewFindings {
   /** Σ severity-tagged confirmed findings across this session's PARSEABLE reviews. */
   confirmed: number;
-  /** review subagents found for this session (foreground + panel-nested), deduped by file. */
+  /** foreground single-agent reviews we ATTEMPTED to parse — the honest coverage denominator
+   *  (panel reviewers are NOT in here; they're adjudicated elsewhere → counted separately). */
   reviews_total: number;
-  /** reviews whose final verdict yielded ≥1 tagged finding (the parsed subset; rest are unknown). */
+  /** foreground reviews whose final verdict yielded ≥1 tagged finding (the parsed subset). */
   reviews_parsed: number;
+  /** panel per-reviewer transcripts seen but NOT parsed (adjudication is the judge's, not theirs). */
+  reviews_panel: number;
 }
 
 interface ReviewMeta {
@@ -56,14 +61,36 @@ export function isReviewMeta(meta: ReviewMeta): boolean {
 }
 
 /** A severity tag `[Pn]` introducing a line: optional leading whitespace, then an
- *  optional markdown header / list / ordered-list marker, optional bold, then `[Pn]`. */
-const FINDING_RE = /^[ \t]*(?:#{1,6}[ \t]+|[-*+][ \t]+|\d+\.[ \t]+)?(?:\*\*|__)?\[P[0-3]\]/gm;
+ *  optional markdown header / list / ordered-list marker, optional bold, then `[Pn]`,
+ *  capturing the rest of the line (the finding TITLE) for the legend/summary guard. */
+const FINDING_LINE_RE = /^[ \t]*(?:#{1,6}[ \t]+|[-*+][ \t]+|\d+\.[ \t]+)?(?:\*\*|__)?\[P[0-3]\](?:\*\*|__)?[ \t]*(.*)$/;
 
-/** Count confirmed, severity-tagged findings in a verdict string. Pure. */
+/** Reject a tagged line that is a SEVERITY-SCALE LEGEND or a FINDINGS-SUMMARY TALLY
+ *  rather than a confirmed finding — the precision guard for the "floor never overcounts"
+ *  contract. Narrow by design (real findings carry a descriptive title), so it rejects:
+ *    • a summary tally:   "[P0]: 0 found", "[P1]: 2", "[P2] — none"      (rest is a count)
+ *    • a legend:          "[P0] = blocker", "[P0] (blocker)", "[P1] critical"  (rest is JUST a severity word) */
+const SEVERITY_WORD = /^[:=(]?\s*(blocker|critical|important|major|minor|nit|trivial|cosmetic|severe|nice[\s-]?to[\s-]?have)\s*\)?[.:]?$/i;
+const SUMMARY_TALLY = /^[:\-—)=]?\s*(\d+|none|no\b|n\/a|zero)/i;
+function isConfirmedFindingTitle(rest: string): boolean {
+  const r = rest.trim();
+  if (r === "") return false;          // a bare tag with no title isn't a confirmed finding
+  if (r.startsWith("=")) return false; // "[P0] = blocker" legend
+  if (SUMMARY_TALLY.test(r)) return false; // "[P0]: 0 found" / "[P1]: 2"
+  if (SEVERITY_WORD.test(r)) return false; // remainder is JUST a severity word (a legend)
+  return true;
+}
+
+/** Count confirmed, severity-tagged findings in a verdict string. Pure. A finding is a
+ *  line introduced by a `[Pn]` tag and carrying a real title (legends/tallies excluded). */
 export function countConfirmedFindings(finalText: string): number {
   if (!finalText) return 0;
-  const m = finalText.match(FINDING_RE);
-  return m ? m.length : 0;
+  let n = 0;
+  for (const line of finalText.split("\n")) {
+    const m = FINDING_LINE_RE.exec(line);
+    if (m && isConfirmedFindingTitle(m[1])) n++;
+  }
+  return n;
 }
 
 /** Flatten a message.content (string | block[]) to plain text. */
@@ -144,10 +171,14 @@ export function extractReviewFindings(id8: string, index: Map<string, string[]>)
   let confirmed = 0;
   let reviews_total = 0;
   let reviews_parsed = 0;
+  let reviews_panel = 0;
   for (const { path, nested } of byName.values()) {
     if (!isReviewMeta(readMeta(path))) continue; // not a review subagent → ignore
-    reviews_total++;
-    if (nested) continue; // panel per-reviewer: confirmed set is the judge's, not here → unknown
+    if (nested) {
+      reviews_panel++; // panel per-reviewer: confirmed set is the judge's, not here → not parsed
+      continue;
+    }
+    reviews_total++; // a foreground review we ATTEMPT to parse (the honest coverage denominator)
     let raw: string;
     try {
       raw = readFileSync(path, "utf8");
@@ -162,6 +193,6 @@ export function extractReviewFindings(id8: string, index: Map<string, string[]>)
     // n === 0 → unknown (prose findings or a clean approve); never claimed as zero.
   }
 
-  if (reviews_total === 0) return undefined;
-  return { confirmed, reviews_total, reviews_parsed };
+  if (reviews_total === 0 && reviews_panel === 0) return undefined;
+  return { confirmed, reviews_total, reviews_parsed, reviews_panel };
 }

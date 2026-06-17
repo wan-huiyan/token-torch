@@ -176,8 +176,9 @@ export interface DashboardData {
 export interface ReviewFindingsSummary {
   confirmed_total: number;       // Σ confirmed findings across sessions
   sessions_with_findings: number; // sessions carrying ≥1 confirmed finding
-  reviews_parsed: number;        // reviews that yielded a tagged count
-  reviews_total: number;         // all review subagents seen (parsed + unknown)
+  reviews_parsed: number;        // foreground reviews that yielded a tagged count
+  reviews_total: number;         // foreground reviews ATTEMPTED (the honest coverage denominator)
+  reviews_panel: number;         // panel per-reviewer transcripts excluded (adjudicated elsewhere)
   note: string;                  // explicit high-precision-floor / partial-coverage caveat
 }
 

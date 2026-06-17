@@ -166,7 +166,7 @@ export function deriveUsageDiagnostics(sessions: UsageSession[]): UsageDiagnosti
         `tokens; ${heavySessions} session${heavySessions === 1 ? "" : "s"} peaked that high. Large contexts are mostly ` +
         `cached (cheap), so this is a characteristic — not a problem.`,
       nudge:
-        "/compact mid-task to summarize, or /clear when you switch tasks, to keep context lean and responses snappy.",
+        "No action needed if your sessions are genuinely long — but if one feels sluggish or pricey, /compact mid-task or /clear when switching tasks keeps context lean.",
     },
     {
       key: "parallel",
@@ -175,7 +175,8 @@ export function deriveUsageDiagnostics(sessions: UsageSession[]): UsageDiagnosti
       detail:
         `${fmtPct(conc.shareAtThreshold)} of your active work time ran with ${PARALLEL_THRESHOLD}+ sessions going at once ` +
         `(peak ${conc.peak} concurrent; ${conc.sessionsAtThreshold} session${conc.sessionsAtThreshold === 1 ? "" : "s"} touched that). ` +
-        `Active time is gap-capped at 5 min, so this is concurrent WORK, not idle-but-open windows.`,
+        `Active time is gap-capped at 5 min, so this counts concurrent WORK, not idle-but-open windows — a looser ` +
+        `idle threshold would report a higher share, so read this as a conservative floor.`,
       nudge:
         "Parallel sessions multiply your usage rate against the shared 5-hour limit window. Stagger heavy runs if you're near a cap.",
     },
