@@ -17,7 +17,7 @@ import { computeBurnBands } from "../../src/shared/burnTier";
 import { loadPlanConfig } from "./plan";
 import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
 import { isRealModelId } from "../../src/shared/models";
-import { deriveCatalogSavings } from "./catalogSavings";
+import { deriveCatalogSavings, CATALOG_FLIP_MARKER } from "./catalogSavings";
 import type { CatalogSnapshot } from "./catalogSnapshot";
 
 const SMALL_N_THRESHOLD = 10;
@@ -363,7 +363,7 @@ export function mapDashboard(
     catalogSnapshots,
     injByDay,
     floorsByDay,
-    { date: "2026-06-04", label: "404-trap flip" },
+    CATALOG_FLIP_MARKER,
   );
 
   const totals: DashboardData["totals"] = {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { deriveCatalogSavings } from "./catalogSavings";
+import { deriveCatalogSavings, CATALOG_FLIP_MARKER } from "./catalogSavings";
 import type { CatalogSnapshot } from "./catalogSnapshot";
 
 let passed = 0;
@@ -66,6 +66,13 @@ check("deriveCatalogSavings: correct for UNSORTED snapshot input (defensive sort
   const cs = deriveCatalogSavings(unsorted, injByDay, new Map(), undefined);
   assert.deepEqual(cs.daily.map((d) => d.est_saving_tokens), [3000, 8000]);
   assert.equal(cs.hidden_count, 436); // latest = 06-06 even though passed first
+});
+
+check("CATALOG_FLIP_MARKER: documented historical context-police flip (sourced constant, not a magic literal)", () => {
+  // The 404-trap flip is an editorial/historical event (S13, 2026-06-04) that PREDATES the
+  // snapshot series — so it can't be derived from data; it lives as one sourced constant.
+  assert.equal(CATALOG_FLIP_MARKER.date, "2026-06-04");
+  assert.equal(CATALOG_FLIP_MARKER.label, "404-trap flip");
 });
 
 console.log(`\n${passed} catalogSavings checks passed`);

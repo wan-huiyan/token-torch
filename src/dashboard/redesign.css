@@ -251,7 +251,7 @@ canvas.crown{position:absolute;top:-18px;left:50%;image-rendering:pixelated;anim
 .cardA .pj .pjname{overflow:hidden;text-overflow:ellipsis}
 .cardA .dt{font-family:var(--mono);font-size:.62rem;color:var(--ink-faint);letter-spacing:.06em;margin-top:5px}
 .cardA .headline{font-family:var(--mono);font-size:.68rem;color:var(--ink-dim);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
-.cardA .headline .hmark{color:var(--cyan)}
+.cardA .headline .hlabel{color:var(--ink-faint);text-transform:uppercase;font-size:.56rem;letter-spacing:.05em;margin-right:5px}
 .cardA .headline .hship{color:var(--ink-faint)}
 .grpmore{margin-top:12px;font-family:var(--mono);font-size:.7rem;color:var(--ink-dim);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 16px;cursor:pointer;transition:.15s}
 .grpmore:hover{border-color:var(--cyan);color:var(--cyan)}
