@@ -83,7 +83,10 @@ function Card({ s, onOpen }: { s: SessionRow; onOpen: (id: string) => void }) {
           </div>
           {s.headline && (
             <div className="headline">
-              <span className="hmark">▸</span> {s.headline}
+              {/* `headline` is the session's FIRST human prompt (a memory-aid), NOT a summary of
+                  what it did — label it so the opening ask is never misread as the outcome.
+                  `shipped_short` (below) carries what actually shipped. */}
+              <span className="hlabel">first prompt</span> {s.headline}
               {s.shipped_short && (
                 <>
                   {" · "}
