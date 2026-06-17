@@ -142,6 +142,61 @@ function verify(
   }
   checks.push(`✓ shipped_count ⟺ shipped_short on all ${dashboard.sessions.length} rows (calendar contract)`);
 
+  // #72 review-findings ("mistakes caught") contract: per-session mistakes_caught, when
+  // present, is a POSITIVE integer (absent = unknown, never 0-filled); and the corpus
+  // summary is internally consistent — Σ row mistakes_caught === review_findings.confirmed_total,
+  // and the parsed subset never exceeds the total reviews seen (no fabricated coverage).
+  let rfRowSum = 0;
+  let rfRowsWithCount = 0;
+  for (const r of dashboard.sessions) {
+    if (r.mistakes_caught == null) continue;
+    if (!(Number.isInteger(r.mistakes_caught) && r.mistakes_caught > 0))
+      throw new Error(`[${r.id}] mistakes_caught must be a positive integer when present, got ${r.mistakes_caught}`);
+    rfRowSum += r.mistakes_caught;
+    rfRowsWithCount += 1;
+  }
+  const rf = dashboard.review_findings;
+  if (rf) {
+    if (rf.confirmed_total !== rfRowSum)
+      throw new Error(`review_findings.confirmed_total (${rf.confirmed_total}) ≠ Σ row mistakes_caught (${rfRowSum})`);
+    if (rf.sessions_with_findings !== rfRowsWithCount)
+      throw new Error(`review_findings.sessions_with_findings (${rf.sessions_with_findings}) ≠ rows with mistakes_caught (${rfRowsWithCount})`);
+    if (rf.reviews_parsed > rf.reviews_total)
+      throw new Error(`review_findings.reviews_parsed (${rf.reviews_parsed}) > reviews_total (${rf.reviews_total}) — impossible coverage`);
+    if (rf.confirmed_total < 0 || rf.reviews_parsed < 0 || rf.reviews_total < 0 || rf.reviews_panel < 0)
+      throw new Error(`review_findings counts must be non-negative`);
+    // floor sanity: a parsed review yielded ≥1 finding, so confirmed_total ≥ reviews_parsed
+    // (a confirmed count below the number of parsed reviews means the count was double-dropped).
+    if (rf.confirmed_total < rf.reviews_parsed)
+      throw new Error(`review_findings.confirmed_total (${rf.confirmed_total}) < reviews_parsed (${rf.reviews_parsed}) — every parsed review has ≥1 finding`);
+    checks.push(
+      `✓ review_findings consistent: ${rf.confirmed_total} confirmed across ${rf.sessions_with_findings} session(s); ` +
+        `${rf.reviews_parsed}/${rf.reviews_total} foreground reviews parsed (${rf.reviews_panel} panel excluded; rest unknown, not zero-filled)`,
+    );
+  } else if (rfRowSum > 0) {
+    throw new Error(`rows carry mistakes_caught (Σ=${rfRowSum}) but dashboard.review_findings is absent`);
+  }
+
+  // #75 usage-diagnostics contract: each driver's share is null (honest unknown) or a
+  // real 0–100 percentage (never a fabricated >100 or negative); attribution stays unknown;
+  // thresholds + peak concurrency are sane. Independent characteristics — they do NOT sum to 100.
+  const ud = dashboard.usage_diagnostics;
+  if (ud) {
+    for (const dr of ud.drivers) {
+      if (dr.share_pct !== null && !(dr.share_pct >= 0 && dr.share_pct <= 100))
+        throw new Error(`usage_diagnostics driver "${dr.key}" share_pct must be null or 0–100, got ${dr.share_pct}`);
+    }
+    const attr = ud.drivers.find((d) => d.key === "attribution");
+    if (!attr || attr.share_pct !== null)
+      throw new Error(`usage_diagnostics: per-skill/MCP attribution must stay unknown (share_pct=null), got ${attr?.share_pct}`);
+    if (ud.peak_concurrency < 0 || ud.parallel_threshold < 1 || ud.heavy_context_threshold < 1)
+      throw new Error(`usage_diagnostics thresholds/peak out of range`);
+    checks.push(
+      `✓ usage_diagnostics: ${ud.drivers.length} characteristics, shares valid (0–100 or unknown); ` +
+        `attribution unknown; peak concurrency ${ud.peak_concurrency}`,
+    );
+  }
+
   // cost_by_fidelity sums to the grand total.
   const fid = Math.round((dashboard.totals.cost_by_fidelity.high + dashboard.totals.cost_by_fidelity.main_loop) * 100);
   if (fid !== Math.round(dashboard.totals.cost_usd * 100))
