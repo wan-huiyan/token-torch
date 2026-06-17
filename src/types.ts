@@ -162,6 +162,19 @@ export interface DashboardData {
   };
   /** context-police savings over time — optional/additive (panel hidden when absent). */
   catalog_savings?: CatalogSavings;
+  /** #72 — optional/additive. Corpus-wide "mistakes caught by reviews" coverage for
+   *  the Build Streak calendar's 2nd stat. A HIGH-PRECISION FLOOR: confirmed counts
+   *  only severity-tagged findings in reviews' final verdicts; most reviews write
+   *  findings as prose and are `unknown` (reviews_total − reviews_parsed). */
+  review_findings?: ReviewFindingsSummary;
+}
+
+export interface ReviewFindingsSummary {
+  confirmed_total: number;       // Σ confirmed findings across sessions
+  sessions_with_findings: number; // sessions carrying ≥1 confirmed finding
+  reviews_parsed: number;        // reviews that yielded a tagged count
+  reviews_total: number;         // all review subagents seen (parsed + unknown)
+  note: string;                  // explicit high-precision-floor / partial-coverage caveat
 }
 
 export interface ProjectRow {
@@ -220,6 +233,11 @@ export interface SessionRow {
    *  nested/top-level reviews + direct commits + skills + ADRs) for the what-shipped
    *  contribution calendar. Present ⟺ shipped_short present (both from extractShipped). */
   shipped_count?: number;
+  /** #72 — optional/additive. Confirmed "mistakes caught by reviews" this session:
+   *  Σ severity-tagged findings in this session's reviews' final verdicts (a HIGH-
+   *  PRECISION FLOOR — prose-only reviews + panel reviewers are unknown, never 0).
+   *  Present ONLY when ≥1 confirmed finding was counted (honest omit elsewhere). */
+  mistakes_caught?: number;
   /** S11 — optional/additive. Real per-session time-phase split (minutes of ACTIVE
    *  wall-clock) for the dashboard phase donut. Absent on older fixtures. */
   active_breakdown?: { thinking_min: number; tool_min: number; subagent_min: number; planning_min: number };

@@ -142,6 +142,37 @@ function verify(
   }
   checks.push(`✓ shipped_count ⟺ shipped_short on all ${dashboard.sessions.length} rows (calendar contract)`);
 
+  // #72 review-findings ("mistakes caught") contract: per-session mistakes_caught, when
+  // present, is a POSITIVE integer (absent = unknown, never 0-filled); and the corpus
+  // summary is internally consistent — Σ row mistakes_caught === review_findings.confirmed_total,
+  // and the parsed subset never exceeds the total reviews seen (no fabricated coverage).
+  let rfRowSum = 0;
+  let rfRowsWithCount = 0;
+  for (const r of dashboard.sessions) {
+    if (r.mistakes_caught == null) continue;
+    if (!(Number.isInteger(r.mistakes_caught) && r.mistakes_caught > 0))
+      throw new Error(`[${r.id}] mistakes_caught must be a positive integer when present, got ${r.mistakes_caught}`);
+    rfRowSum += r.mistakes_caught;
+    rfRowsWithCount += 1;
+  }
+  const rf = dashboard.review_findings;
+  if (rf) {
+    if (rf.confirmed_total !== rfRowSum)
+      throw new Error(`review_findings.confirmed_total (${rf.confirmed_total}) ≠ Σ row mistakes_caught (${rfRowSum})`);
+    if (rf.sessions_with_findings !== rfRowsWithCount)
+      throw new Error(`review_findings.sessions_with_findings (${rf.sessions_with_findings}) ≠ rows with mistakes_caught (${rfRowsWithCount})`);
+    if (rf.reviews_parsed > rf.reviews_total)
+      throw new Error(`review_findings.reviews_parsed (${rf.reviews_parsed}) > reviews_total (${rf.reviews_total}) — impossible coverage`);
+    if (rf.confirmed_total < 0 || rf.reviews_parsed < 0 || rf.reviews_total < 0)
+      throw new Error(`review_findings counts must be non-negative`);
+    checks.push(
+      `✓ review_findings consistent: ${rf.confirmed_total} confirmed across ${rf.sessions_with_findings} session(s); ` +
+        `${rf.reviews_parsed}/${rf.reviews_total} reviews parsed (rest unknown, not zero-filled)`,
+    );
+  } else if (rfRowSum > 0) {
+    throw new Error(`rows carry mistakes_caught (Σ=${rfRowSum}) but dashboard.review_findings is absent`);
+  }
+
   // cost_by_fidelity sums to the grand total.
   const fid = Math.round((dashboard.totals.cost_by_fidelity.high + dashboard.totals.cost_by_fidelity.main_loop) * 100);
   if (fid !== Math.round(dashboard.totals.cost_usd * 100))
