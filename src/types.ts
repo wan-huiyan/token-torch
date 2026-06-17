@@ -162,6 +162,40 @@ export interface DashboardData {
   };
   /** context-police savings over time — optional/additive (panel hidden when absent). */
   catalog_savings?: CatalogSavings;
+  /** #72 — optional/additive. Corpus-wide "mistakes caught by reviews" coverage for
+   *  the Build Streak calendar's 2nd stat. A HIGH-PRECISION FLOOR: confirmed counts
+   *  only severity-tagged findings in reviews' final verdicts; most reviews write
+   *  findings as prose and are `unknown` (reviews_total − reviews_parsed). */
+  review_findings?: ReviewFindingsSummary;
+  /** #75 — optional/additive. "What's driving your usage" characteristics (mirrors the
+   *  native /usage breakdown). Independent characteristics, NOT a sum-to-100 breakdown;
+   *  per-skill/MCP attribution is unknown. Panel hidden when absent. */
+  usage_diagnostics?: UsageDiagnostics;
+}
+
+export interface ReviewFindingsSummary {
+  confirmed_total: number;       // Σ confirmed findings across sessions
+  sessions_with_findings: number; // sessions carrying ≥1 confirmed finding
+  reviews_parsed: number;        // foreground reviews that yielded a tagged count
+  reviews_total: number;         // foreground reviews ATTEMPTED (the honest coverage denominator)
+  reviews_panel: number;         // panel per-reviewer transcripts excluded (adjudicated elsewhere)
+  note: string;                  // explicit high-precision-floor / partial-coverage caveat
+}
+
+export interface UsageDriver {
+  key: "subagents" | "heavy_context" | "parallel" | "attribution";
+  label: string;
+  share_pct: number | null;      // % for this characteristic; null = genuinely UNKNOWN (never faked)
+  detail: string;                // plain-English measured detail (carries the real numbers)
+  nudge: string;                 // an action you can take (native-/usage nudge style)
+}
+
+export interface UsageDiagnostics {
+  drivers: UsageDriver[];
+  peak_concurrency: number;        // max simultaneous active sessions (gap-capped)
+  parallel_threshold: number;      // the "heavily parallel" cutoff (e.g. 4)
+  heavy_context_threshold: number; // the "large context" cutoff in tokens (e.g. 150000)
+  note: string;                    // local-only undercount + characteristics-not-breakdown caveat
 }
 
 export interface ProjectRow {
@@ -220,6 +254,11 @@ export interface SessionRow {
    *  nested/top-level reviews + direct commits + skills + ADRs) for the what-shipped
    *  contribution calendar. Present ⟺ shipped_short present (both from extractShipped). */
   shipped_count?: number;
+  /** #72 — optional/additive. Confirmed "mistakes caught by reviews" this session:
+   *  Σ severity-tagged findings in this session's reviews' final verdicts (a HIGH-
+   *  PRECISION FLOOR — prose-only reviews + panel reviewers are unknown, never 0).
+   *  Present ONLY when ≥1 confirmed finding was counted (honest omit elsewhere). */
+  mistakes_caught?: number;
   /** S11 — optional/additive. Real per-session time-phase split (minutes of ACTIVE
    *  wall-clock) for the dashboard phase donut. Absent on older fixtures. */
   active_breakdown?: { thinking_min: number; tool_min: number; subagent_min: number; planning_min: number };

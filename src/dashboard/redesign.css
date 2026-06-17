@@ -614,6 +614,18 @@ canvas.miniflame{image-rendering:pixelated}
 .cs-svg{width:100%;height:auto;margin:6px 0}
 @media (max-width:640px){.cs-tiles{grid-template-columns:repeat(2,1fr)}}
 
+/* ---------- #75 usage-diagnostics ("what's driving your usage") ---------- */
+.ud-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:12px 0}
+.ud-card{border:1px solid var(--line-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.ud-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.ud-label{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint)}
+.ud-share{font-family:var(--mono);font-size:1.5rem;font-weight:800;color:var(--cyan);line-height:1}
+.ud-share.unknown{font-size:.95rem;font-weight:700;color:var(--amber);text-transform:lowercase}
+.ud-detail{font-size:.82rem;line-height:1.55;color:var(--ink)}
+.ud-nudge{font-size:.74rem;line-height:1.5;color:var(--ink-faint);border-top:1px dashed var(--line-soft);padding-top:8px}
+.ud-arrow{color:var(--lime);font-weight:800}
+@media (max-width:640px){.ud-grid{grid-template-columns:1fr}}
+
 /* ---------- recommendations ---------- */
 .recs{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;align-items:start}
 .flags{display:flex;flex-direction:column;gap:12px}

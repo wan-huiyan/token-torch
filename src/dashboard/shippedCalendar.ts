@@ -15,6 +15,7 @@ import type { SessionRow } from "../types";
 export interface CalCell {
   date: string;        // YYYY-MM-DD (local day)
   shipped: number;     // Σ shipped_count of that day's sessions (real; commit-heavy → can be 100s)
+  mistakesCaught: number; // #72 — Σ confirmed review findings that day (HIGH-PRECISION FLOOR; 0 = unknown-or-none)
   sessions: number;    // # sessions that day (any)
   lateSessions: number; // # sessions that day started 21:00–05:59 local (NOT a boolean — at high
                         // session volume "any late session" is nearly always true; surface the
@@ -27,6 +28,8 @@ export interface ShippedCalendar {
   weeks: CalCell[][];        // columns; each is a 7-cell Sun→Sat column
   maxShipped: number;        // for tier scaling (0 when nothing shipped)
   totalShipped: number;
+  totalMistakesCaught: number; // #72 — Σ confirmed review findings in window (floor; see review_findings note)
+  mistakeDays: number;       // #72 — # days with ≥1 confirmed review finding
   activeDays: number;        // days with shipped > 0
   bestDayDate: string | null;
   lateSessions: number;      // Σ sessions started late-night (wellness nudge)
@@ -50,6 +53,7 @@ const isLateHour = (h: number) => h >= 21 || h < 6;
 
 interface DayAgg {
   shipped: number;
+  mistakesCaught: number;
   sessions: number;
   lateSessions: number;
 }
@@ -62,15 +66,17 @@ export function deriveShippedCalendar(rows: SessionRow[]): ShippedCalendar {
     const d = r.start_ts ? new Date(r.start_ts) : r.date ? fromKey(r.date.slice(0, 10)) : null;
     if (!d || isNaN(d.getTime())) continue;
     const key = localKey(d);
-    const agg = byDay.get(key) ?? { shipped: 0, sessions: 0, lateSessions: 0 };
+    const agg = byDay.get(key) ?? { shipped: 0, mistakesCaught: 0, sessions: 0, lateSessions: 0 };
     agg.sessions += 1;
     agg.shipped += r.shipped_count ?? 0;
+    agg.mistakesCaught += r.mistakes_caught ?? 0;
     if (r.start_ts && isLateHour(new Date(r.start_ts).getHours())) agg.lateSessions += 1;
     byDay.set(key, agg);
   }
 
   const empty: ShippedCalendar = {
-    weeks: [], maxShipped: 0, totalShipped: 0, activeDays: 0, bestDayDate: null,
+    weeks: [], maxShipped: 0, totalShipped: 0, totalMistakesCaught: 0, mistakeDays: 0,
+    activeDays: 0, bestDayDate: null,
     lateSessions: 0, weekendDaysWorked: 0, streak: 0, hasData: false,
   };
   if (byDay.size === 0) return empty;
@@ -89,6 +95,7 @@ export function deriveShippedCalendar(rows: SessionRow[]): ShippedCalendar {
   const weeks: CalCell[][] = [];
   let col: CalCell[] = [];
   let maxShipped = 0, totalShipped = 0, activeDays = 0, lateSessions = 0;
+  let totalMistakesCaught = 0, mistakeDays = 0;
   let bestDayDate: string | null = null;
   const weekendDays = new Set<string>();
 
@@ -98,12 +105,15 @@ export function deriveShippedCalendar(rows: SessionRow[]): ShippedCalendar {
     const inRange = key >= keys[0] && key <= keys[keys.length - 1];
     const agg = byDay.get(key);
     const shipped = agg?.shipped ?? 0;
+    const mistakesCaught = agg?.mistakesCaught ?? 0;
     const sessions = agg?.sessions ?? 0;
     const wknd = isWeekend(d);
-    col.push({ date: key, shipped, sessions, lateSessions: agg?.lateSessions ?? 0, weekend: wknd, inRange });
+    col.push({ date: key, shipped, mistakesCaught, sessions, lateSessions: agg?.lateSessions ?? 0, weekend: wknd, inRange });
     if (agg) {
       totalShipped += shipped;
       if (shipped > 0) { activeDays += 1; if (shipped > maxShipped) { maxShipped = shipped; bestDayDate = key; } }
+      totalMistakesCaught += mistakesCaught;
+      if (mistakesCaught > 0) mistakeDays += 1;
       lateSessions += agg.lateSessions;
       if (wknd && sessions > 0) weekendDays.add(key);
     }
@@ -124,7 +134,7 @@ export function deriveShippedCalendar(rows: SessionRow[]): ShippedCalendar {
   }
 
   return {
-    weeks, maxShipped, totalShipped, activeDays, bestDayDate,
+    weeks, maxShipped, totalShipped, totalMistakesCaught, mistakeDays, activeDays, bestDayDate,
     lateSessions, weekendDaysWorked: weekendDays.size, streak, hasData: true,
   };
 }

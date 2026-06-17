@@ -13,6 +13,8 @@ import { round2 } from "./pricing";
 import { deriveEffort, type SettingsFacts } from "./effort";
 import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
+import { extractReviewFindings, REVIEW_FINDINGS_NOTE } from "./reviewFindings";
+import { deriveUsageDiagnostics, type UsageSession } from "./usageDiagnostics";
 import { computeBurnBands } from "../../src/shared/burnTier";
 import { loadPlanConfig } from "./plan";
 import { deriveContextOverhead, OVERHEAD_NOTE } from "./contextOverhead";
@@ -164,11 +166,28 @@ export function mapDashboard(
   // context-police catalog-savings inputs (per-day injections + base-context floors).
   const injByDay = new Map<string, number>();
   const floorsByDay = new Map<string, number[]>();
+  // #72 review-findings ("mistakes caught") coverage accumulators.
+  let rfConfirmedTotal = 0;
+  let rfSessionsWithFindings = 0;
+  let rfReviewsParsed = 0;
+  let rfReviewsTotal = 0;
+  let rfReviewsPanel = 0;
+  // #75 usage-diagnostics per-session inputs (concurrency needs in-memory timestamps).
+  const usageSessions: UsageSession[] = [];
 
   for (const rec of records) {
     fileCount += rec.rawProjectDirs.length; // transcripts merged for this session
     const fb = extractFromJsonl(rec.id, subagentIndex);
     const shipped = extractShipped(rec.id, subagentIndex, fb.subagentTimings);
+    // #72 "mistakes caught": confirmed, severity-tagged review findings (high-precision floor).
+    const reviewFindings = extractReviewFindings(rec.id, subagentIndex);
+    if (reviewFindings) {
+      rfConfirmedTotal += reviewFindings.confirmed;
+      rfReviewsParsed += reviewFindings.reviews_parsed;
+      rfReviewsTotal += reviewFindings.reviews_total;
+      rfReviewsPanel += reviewFindings.reviews_panel;
+      if (reviewFindings.confirmed > 0) rfSessionsWithFindings += 1;
+    }
     const ov = overlay.get(rec.id);
     // build detail first to get the recomputed total, then derive the overlay note.
     const detail = mapJsonlDetail(rec, fb, shipped);
@@ -208,6 +227,21 @@ export function mapDashboard(
       arr.push(rec.scaffoldingFloor);
       floorsByDay.set(rec.date, arr);
     }
+
+    // ---- #75 usage-diagnostics input: real per-session billed tokens, heavy-context,
+    //      subagent throughput + dispatches, and in-memory timestamps for concurrency. ----
+    const subTok = Object.values(fb.subagentPerModelTokens).reduce(
+      (s, t) => s + t.fresh_input + t.output + t.cache_write + t.cache_read,
+      0,
+    );
+    usageSessions.push({
+      timestampsMs: rec.timestampsMs ?? [],
+      totalBilledTokens: rec.tokens.fresh_input + rec.tokens.cache_write + rec.tokens.cache_read + rec.tokens.output,
+      heavyContextTokens: rec.heavyContextTokens,
+      peakContextTokens: rec.peakContextTokens,
+      subagentTokens: subTok,
+      subagentCount: fb.subagentTimings.length,
+    });
 
     details.push(detail);
 
@@ -253,6 +287,8 @@ export function mapDashboard(
       ...(rec.headline ? { headline: rec.headline } : {}),
       ...(shipped ? (() => { const ss = shippedShort(shipped); return ss ? { shipped_short: ss } : {}; })() : {}),
       ...(shipped ? (() => { const sc = shippedCount(shipped); return sc > 0 ? { shipped_count: sc } : {}; })() : {}),
+      // #72 — present ONLY when ≥1 confirmed finding (unknown elsewhere, never 0-filled).
+      ...(reviewFindings && reviewFindings.confirmed > 0 ? { mistakes_caught: reviewFindings.confirmed } : {}),
       active_breakdown: detail.time.active_breakdown,
     });
   }
@@ -458,6 +494,22 @@ export function mapDashboard(
     insights_source: llmInsightsMd ? insightsSource : "template",
     plan: loadPlanConfig(rows),
     catalog_savings,
+    // #72 — corpus-wide review-findings coverage for the calendar's 2nd stat. Present
+    // only when at least one review subagent was seen anywhere (panel hidden otherwise).
+    ...(rfReviewsTotal > 0 || rfReviewsPanel > 0
+      ? {
+          review_findings: {
+            confirmed_total: rfConfirmedTotal,
+            sessions_with_findings: rfSessionsWithFindings,
+            reviews_parsed: rfReviewsParsed,
+            reviews_total: rfReviewsTotal,
+            reviews_panel: rfReviewsPanel,
+            note: REVIEW_FINDINGS_NOTE,
+          },
+        }
+      : {}),
+    // #75 — "what's driving your usage" characteristics (present when there are sessions).
+    ...(rows.length > 0 ? { usage_diagnostics: deriveUsageDiagnostics(usageSessions) } : {}),
   };
 
   return {

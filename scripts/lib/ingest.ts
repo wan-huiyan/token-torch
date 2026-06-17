@@ -60,6 +60,11 @@ export function mergeTokenSets(perModel: Record<string, TokenSet>): TokenSet {
   return out;
 }
 
+/** #75 — "ran long / got heavy" context threshold (tokens). Mirrors Claude Code's
+ *  native /usage ">150k context" bucket. A turn's context = cache_read + cache_write +
+ *  fresh_input (all input tokens that request). */
+export const HEAVY_CONTEXT_THRESHOLD = 150_000;
+
 export interface ParsedTranscript {
   tokens: TokenSet;                          // aggregate (non-sidechain)
   perModelTokens: Record<string, TokenSet>;  // model id → tokens
@@ -68,6 +73,8 @@ export interface ParsedTranscript {
   assistantMsgCount: number;                 // deduped, non-sidechain
   scaffoldingFloor: number;                  // min nonzero cache_read across kept turns = base context re-read each turn (0 if none)
   turnCount: number;                         // count of kept turns with cache_read > 0
+  peakContextTokens: number;                 // #75 — max per-turn (cache_read+cache_write+fresh_input)
+  heavyContextTokens: number;                // #75 — Σ billed tokens on turns where context > HEAVY_CONTEXT_THRESHOLD
   timestampsMs: number[];                    // ALL row timestamps, sorted asc
   ccVersion?: string;
   observedEffort?: string;                   // value from a /effort local-command-stdout marker, if any (last-write-wins)
@@ -197,6 +204,12 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
   // Running min (not Math.min(...spread)) to stay safe on very long sessions.
   let scaffoldingFloor = 0;
   let turnCount = 0;
+  // #75: per-turn context size = the input context that turn (cache_read + cache_write +
+  // fresh_input). peakContextTokens = the heaviest turn; heavyContextTokens = billed tokens
+  // (context + output) on turns whose context exceeded HEAVY_CONTEXT_THRESHOLD — the share
+  // of throughput spent in large contexts (cheap when cached, but the "ran long" signal).
+  let peakContextTokens = 0;
+  let heavyContextTokens = 0;
   for (const { usage, model, content } of bestMsg.values()) {
     const t = extractUsageTokens(usage);
     addInto(tokens, t);
@@ -204,6 +217,9 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     addInto(perModelTokens[model], t);
     modelMsgCounts[model] = (modelMsgCounts[model] ?? 0) + 1;
     collectTools(content, toolCounts);
+    const ctx = t.cache_read + t.cache_write + t.fresh_input;
+    if (ctx > peakContextTokens) peakContextTokens = ctx;
+    if (ctx > HEAVY_CONTEXT_THRESHOLD) heavyContextTokens += ctx + t.output;
     if (t.cache_read > 0) {
       turnCount++;
       scaffoldingFloor = scaffoldingFloor === 0 ? t.cache_read : Math.min(scaffoldingFloor, t.cache_read);
@@ -215,6 +231,8 @@ export function parseMainTranscript(paths: string[]): ParsedTranscript {
     assistantMsgCount: bestMsg.size,
     scaffoldingFloor,
     turnCount,
+    peakContextTokens,
+    heavyContextTokens,
     timestampsMs: timestamps.sort((a, b) => a - b),
     timePhases: deriveTimePhases(events),
     ...(headline ? { headline } : {}),
@@ -295,6 +313,8 @@ export interface SessionRecord {
   assistantMsgCount: number;
   scaffoldingFloor: number; // min nonzero cache_read across turns (base-context floor, issue #10)
   turnCount: number;        // turns that read the cached prefix
+  peakContextTokens: number;  // #75 — heaviest per-turn context (cache_read+cache_write+fresh_input)
+  heavyContextTokens: number; // #75 — Σ billed tokens on turns with context > HEAVY_CONTEXT_THRESHOLD
   toolCounts: Record<string, number>;
   hasUsage: boolean;
   ccVersion?: string;
@@ -337,8 +357,10 @@ export interface IngestCache {
  *  degrade (silent loss of the ribbon/donut/turns), so we discard on mismatch. v5
  *  (S11) changed the phase classification — interactive (AskUserQuestion) gaps now
  *  count as you-away idle, NOT machine tool_min; a v4 cache holds the old phase
- *  results (tool_min inflated by you-answering time), so we discard on mismatch. */
-export const CACHE_VERSION = 5;
+ *  results (tool_min inflated by you-answering time), so we discard on mismatch. v6
+ *  (#75) added peakContextTokens/heavyContextTokens; a v5 cache lacking them would
+ *  serve 0 (silent under-report of the heavy-context usage signal), so we discard. */
+export const CACHE_VERSION = 6;
 interface CacheFile { version: number; entries: IngestCache; }
 
 export const cacheKeyFor = (path: string): string => path;
@@ -407,6 +429,8 @@ export function buildSessionRecord(args: {
     assistantMsgCount: parsed.assistantMsgCount,
     scaffoldingFloor: parsed.scaffoldingFloor,
     turnCount: parsed.turnCount,
+    peakContextTokens: parsed.peakContextTokens,
+    heavyContextTokens: parsed.heavyContextTokens,
     toolCounts: parsed.toolCounts,
     hasUsage: tot > 0,
     ccVersion: parsed.ccVersion,

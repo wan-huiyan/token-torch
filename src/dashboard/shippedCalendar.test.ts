@@ -6,8 +6,12 @@ let passed = 0;
 const check = (name: string, fn: () => void) => { fn(); passed++; console.log(`  ok  ${name}`); };
 
 // minimal row factory — only the fields deriveShippedCalendar reads.
-const row = (start_ts: string, shipped_count?: number): SessionRow =>
-  ({ id: "x", date: start_ts.slice(0, 10), project: "p", start_ts, ...(shipped_count != null ? { shipped_count } : {}) } as SessionRow);
+const row = (start_ts: string, shipped_count?: number, mistakes_caught?: number): SessionRow =>
+  ({
+    id: "x", date: start_ts.slice(0, 10), project: "p", start_ts,
+    ...(shipped_count != null ? { shipped_count } : {}),
+    ...(mistakes_caught != null ? { mistakes_caught } : {}),
+  } as SessionRow);
 
 // Build the fixture timestamp from LOCAL components so `new Date(iso).getHours()` === hh and
 // the local DAY === `day` in the runner's TZ (the module buckets + classifies by LOCAL time,
@@ -89,6 +93,26 @@ check("weekendDaysWorked counts distinct Sat/Sun days with any session", () => {
     row(at("2026-05-11", 12), 5), // Mon (not weekend)
   ]);
   assert.equal(c.weekendDaysWorked, 2);
+});
+
+check("#72 2nd stat: sums mistakes_caught per day; totals + mistakeDays; absent = 0 (unknown, not negative)", () => {
+  const c = deriveShippedCalendar([
+    row(at("2026-05-11", 12), 3, 2), // Mon: 2 confirmed findings
+    row(at("2026-05-11", 14), 2, 1), // same day → 3 mistakes caught
+    row(at("2026-05-12", 12), 9),    // Tue: shipped but mistakes_caught absent → 0 (unknown)
+  ]);
+  assert.equal(c.totalMistakesCaught, 3);
+  assert.equal(c.mistakeDays, 1, "only Mon has confirmed findings");
+  const mon = c.weeks.flat().find((x) => x.date === "2026-05-11")!;
+  const tue = c.weeks.flat().find((x) => x.date === "2026-05-12")!;
+  assert.equal(mon.mistakesCaught, 3);
+  assert.equal(tue.mistakesCaught, 0, "absent mistakes_caught is a non-negative 0, never fabricated");
+});
+
+check("empty calendar carries the 2nd-stat fields at 0", () => {
+  const c = deriveShippedCalendar([]);
+  assert.equal(c.totalMistakesCaught, 0);
+  assert.equal(c.mistakeDays, 0);
 });
 
 check("shippedTier scales RELATIVE to max (not fixed thresholds)", () => {

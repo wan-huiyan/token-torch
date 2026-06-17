@@ -100,7 +100,7 @@ const recStub = (over: Partial<SessionRecord>): SessionRecord => ({
   perModelTokens: { "claude-opus-4-8": { fresh_input: 1, output: 1, cache_write: 0, cache_read: 0 } },
   modelMsgCounts: { "claude-opus-4-8": 12 }, dominantModel: "opus", cacheHitPct: 0,
   wallClockMin: 1, activeMin: 1, idleMin: 0, assistantMsgCount: 12,
-  scaffoldingFloor: 0, turnCount: 0, toolCounts: {}, hasUsage: true,
+  scaffoldingFloor: 0, turnCount: 0, peakContextTokens: 0, heavyContextTokens: 0, toolCounts: {}, hasUsage: true,
   timePhases: { active_breakdown: { thinking_min: 0, tool_min: 0, subagent_min: 0, planning_min: 0 }, segments: [], tool_time: [], turns: [] },
   ...over,
 });
