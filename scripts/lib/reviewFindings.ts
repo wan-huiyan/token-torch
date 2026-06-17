@@ -71,7 +71,11 @@ const FINDING_LINE_RE = /^[ \t]*(?:#{1,6}[ \t]+|[-*+][ \t]+|\d+\.[ \t]+)?(?:\*\*
  *    • a summary tally:   "[P0]: 0 found", "[P1]: 2", "[P2] — none"      (rest is a count)
  *    • a legend:          "[P0] = blocker", "[P0] (blocker)", "[P1] critical"  (rest is JUST a severity word) */
 const SEVERITY_WORD = /^[:=(]?\s*(blocker|critical|important|major|minor|nit|trivial|cosmetic|severe|nice[\s-]?to[\s-]?have)\s*\)?[.:]?$/i;
-const SUMMARY_TALLY = /^[:\-—)=]?\s*(\d+|none|no\b|n\/a|zero)/i;
+// NB: the leading separator is REQUIRED — a tally writes "[P0]: 0 found" / "[P2] — none"
+// (the count follows a separator). A real finding TITLE that merely starts with a digit or
+// "No…" ("404 on GC'd executions", "No observability counter") has NO separator and must NOT
+// be dropped — making the separator optional silently undercounts real findings.
+const SUMMARY_TALLY = /^[:\-—)=]\s*(\d+|none|no\b|n\/a|zero)/i;
 function isConfirmedFindingTitle(rest: string): boolean {
   const r = rest.trim();
   if (r === "") return false;          // a bare tag with no title isn't a confirmed finding

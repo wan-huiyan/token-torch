@@ -51,6 +51,16 @@ check("does NOT count a findings-SUMMARY tally line (the trap)", () => {
 check("a bare tag with no title is not a finding", () => {
   assert.equal(countConfirmedFindings("### [P1]\n- [P2]   "), 0);
 });
+check("a real finding whose TITLE starts with a digit or 'No' is NOT dropped as a tally", () => {
+  // regression: the legend/tally guard must require a SEPARATOR before a count — a title
+  // beginning with a digit ("404 …") or "No …" carries no separator and is a real finding.
+  const findings = [
+    "### [P2] 404 on garbage-collected executions (Cloud Run retains 90 days)",
+    "### [P2] No observability counter on synthesised sentinels",
+    "### [P1] 60s gate breaks on a timezone mismatch",
+  ].join("\n");
+  assert.equal(countConfirmedFindings(findings), 3, "digit/No-prefixed titles are real findings, not tallies");
+});
 check("does NOT count inline-prose [Pn] mid-sentence", () => {
   assert.equal(countConfirmedFindings("This is a [P1] concern but only in passing."), 0);
 });
