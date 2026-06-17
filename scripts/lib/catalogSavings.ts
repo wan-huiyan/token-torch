@@ -8,6 +8,16 @@ export const CATALOG_SAVINGS_NOTE =
   "observed floor is a confounded proxy (it also bundles the system prompt + earliest " +
   "conversation, and is perturbed by cache TTL / pre-warming) — not a clean attribution.";
 
+/**
+ * The "404-trap flip" is a HISTORICAL context-police event: on 2026-06-04 (session S13) ~404 trap
+ * skills were flipped to `disable-model-invocation`, cutting the bare-name catalog weight. It
+ * PREDATES the catalog-snapshot series (snapshots begin 2026-06-06 and show no drop), so it cannot
+ * be derived from the daily data — it is an editorial annotation, kept here as ONE sourced constant
+ * (it was an inline literal in mapDashboard.ts). Provenance: the session record + S13 analysis doc
+ * `docs/analysis/2026-06-04-context-police-s13-spotcheck-embeddings-probe-flip-ready.md`.
+ */
+export const CATALOG_FLIP_MARKER: CatalogFlipMarker = { date: "2026-06-04", label: "404-trap flip" };
+
 function median(xs: number[]): number {
   if (xs.length === 0) return 0;
   const s = [...xs].sort((a, b) => a - b);
