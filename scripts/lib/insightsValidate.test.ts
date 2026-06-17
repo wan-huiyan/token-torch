@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
-import type { DashboardData } from "../../src/types";
-import { allowedNumbers, validateInsightNumbers, validateTaggedInsights } from "./insightsValidate";
+import type { DashboardData, SessionDetailData } from "../../src/types";
+import {
+  allowedNumbers,
+  validateInsightNumbers,
+  validateTaggedInsights,
+  validateNumbersAgainst,
+  allowedNumbersSession,
+  validateSessionTakeaway,
+} from "./insightsValidate";
+import { sessionDemo } from "../../src/fixtures/session-demo.fixture";
 
 let passed = 0;
 const check = (name: string, fn: () => void) => {
@@ -420,5 +428,70 @@ check("tagged: a tag value within rounding tolerance of the share passes", () =>
 // heuristic: "<num>%, <NextLabel>" in list prose is structurally ambiguous (the number belongs
 // to the PRECEDING label), so a reverse bind false-positives on legit "Opus 4.8 70%, Opus 4.7
 // 25%" mixes (caught in TDD). Prose binding stays forward-only + fail-open; tags do the rest.
+
+// ============================================================================
+// #52 — per-session takeaway whitelist + gate.
+// ============================================================================
+
+/** A second session with DISTINCT figures, for the cross-session binding test. */
+function otherSession(): SessionDetailData {
+  return {
+    ...sessionDemo,
+    id: "other001",
+    cost_usd: 42.5,
+    cache_pct: 60.0,
+    time: { ...sessionDemo.time, wall_clock_min: 50.0, active_min: 40.0 },
+    tokens: { ...sessionDemo.tokens, cache_hit_pct: 60.0 },
+    cost: { ...sessionDemo.cost, total_usd: 42.5, main_loop_usd: 42.5, by_category: undefined },
+  };
+}
+
+check("session whitelist: includes this session's own measured figures", () => {
+  const nums = allowedNumbersSession(sessionDemo);
+  assert.ok(nums.includes(130.91), "cost_usd in whitelist");
+  assert.ok(nums.includes(77.8), "active_min in whitelist");
+  assert.ok(nums.includes(169.4), "wall_clock_min in whitelist");
+  assert.ok(nums.includes(97.3), "cache_pct in whitelist");
+  assert.ok(nums.includes(66.7), "cache_read cost_pct in whitelist");
+  // derived active-share % = 77.8/169.4*100 ≈ 45.93
+  assert.ok(nums.some((n) => Math.abs(n - 45.93) < 0.1), "derived active-share % in whitelist");
+});
+
+check("session gate: a takeaway citing only this session's numbers passes", () => {
+  const r = validateSessionTakeaway(
+    "This run spanned 169.4 minutes but only 77.8 were real compute. Cache hits ran 97.3%, so cache reads were 66.7% of the bill.",
+    sessionDemo,
+  );
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
+check("session gate: a fabricated number is rejected", () => {
+  const r = validateSessionTakeaway("This run burned $9,999.99 of fairy dust.", sessionDemo);
+  assert.equal(r.ok, false);
+  assert.ok(r.offending.some((o) => o.includes("9,999")), JSON.stringify(r.offending));
+});
+
+check("session gate: a superlative is rejected even with a valid number", () => {
+  const r = validateSessionTakeaway("Best run ever — only 77.8 minutes of compute!", sessionDemo);
+  assert.equal(r.ok, false);
+  assert.ok(r.claims.some((c) => /best/i.test(c)), JSON.stringify(r.claims));
+});
+
+check("session gate: a number valid for ANOTHER session is rejected for THIS one (per-session binding)", () => {
+  // $130.91 is sessionDemo's cost; for `otherSession` ($42.50) it is fabrication.
+  const r = validateSessionTakeaway("This run cost $130.91.", otherSession());
+  assert.equal(r.ok, false, "another session's cost must not validate here");
+  assert.ok(r.offending.some((o) => o.includes("130.91")), JSON.stringify(r.offending));
+  // …and the same note passes against the session it actually describes.
+  assert.equal(validateSessionTakeaway("This run cost $130.91.", sessionDemo).ok, true);
+});
+
+check("validateNumbersAgainst: generic core matches the dashboard path on numbers (no PCN)", () => {
+  // A note with no model-mix labels validates identically whether routed via the dashboard
+  // gate or the generic core given the same flat whitelist values.
+  const allowed = [{ value: 100, unit: "dollar" as const }];
+  assert.equal(validateNumbersAgainst("Spent $100.", allowed).ok, true);
+  assert.equal(validateNumbersAgainst("Spent $150.", allowed).ok, false); // outside the 1% tolerance
+});
 
 console.log(`\n${passed} insights-validate checks passed`);

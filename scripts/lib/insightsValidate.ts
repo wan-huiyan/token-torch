@@ -12,7 +12,7 @@
  * (ADR 0001/0002, L4/L7). The actual LLM call is exercised only when a key exists.
  * ========================================================================== */
 
-import type { DashboardData } from "../../src/types";
+import type { DashboardData, SessionDetailData } from "../../src/types";
 import { prettyModelId } from "../../src/shared/models";
 
 export interface ValidationResult {
@@ -49,6 +49,13 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
  *  the mantissa BEFORE matching so a fabricated "$5M" cannot slip through merely because
  *  the bare "5" coincides with a whitelisted aggregate (issue #9). */
 const SCALE: Record<string, number> = { k: 1e3, m: 1e6, b: 1e9 };
+
+/** Matches $1,234.56 | 1,234 | 95.0% | .5% | $5M | 80B — captures (1) an optional "$" prefix,
+ *  (2) the numeric core (commas/decimals/leading-dot), (3) an optional k/K/M/B scale suffix,
+ *  (4) an optional "%" suffix. Groups 1 & 4 give the token its UNIT (#37). Module-scope so the
+ *  generic core and the dashboard wrapper share one definition; `matchAll` clones it, so the
+ *  /g lastIndex is never shared across calls. */
+const TOKEN_RE = /(\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)([kKmMbB])?\s?(%)?/g;
 
 /** #37 vacuity gate: superlatives / performance comparisons / causal claims the usage data
  *  CANNOT support (HARD RULES 2 & 5). A note that wears the "agent"/"llm" trust badge must
@@ -126,33 +133,39 @@ function matchesAllowed(value: number, allowed: AllowedNumber[], unit: Unit): bo
   return false;
 }
 
-/** Extract every $/%/numeric token from prose and check each against the whitelist.
- *  Tokens are the bare numbers (commas/$/% stripped). Year tokens (date labels) and
- *  small structural integers 0–1 (bullet artifacts like "1 project") still must match
- *  an allowed value — they usually do (sessions/counts) — but are NOT auto-exempted
- *  except for 4-digit years. */
-export function validateInsightNumbers(prose: string, data: DashboardData): ValidationResult {
-  const allowed = allowedNumbersTyped(data);
+/** Generic no-fabrication + no-superlative core (the reusable honesty spine). Every $/%/numeric
+ *  token in `prose` (commas/$/% stripped; bare 4-digit years exempt as date labels; a k/M/B
+ *  suffix scaled BEFORE matching, #9) must match an `allowed` value, UNIT-AWARE (#37: a $-token
+ *  matches only dollar values, a %-token only percents; a bare token matches any unit). Plus the
+ *  #37 vacuity gate on the markdown-stripped text: forbidden superlative / performance-comparison
+ *  / causal phrases, rejected even WITH a valid number. NO entity binding — the model_mix PCN swap
+ *  check is dashboard-specific (validateInsightNumbers). The per-session takeaway gate
+ *  (validateSessionTakeaway, #52) reuses this directly: one model per session ⇒ no swap surface. */
+export function validateNumbersAgainst(prose: string, allowed: AllowedNumber[]): ValidationResult {
   const offending: string[] = [];
-  // matches: $1,234.56 | 1,234 | 95.0% | .5% | $5M | 80B — captures (1) an optional "$"
-  // prefix, (2) the numeric core (commas/decimals/leading-dot), (3) an optional k/K/M/B
-  // scale suffix, (4) an optional "%" suffix. Groups 1 & 4 give the token its UNIT (#37).
-  const tokenRe = /(\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)([kKmMbB])?\s?(%)?/g;
-  for (const m of prose.matchAll(tokenRe)) {
+  for (const m of prose.matchAll(TOKEN_RE)) {
     const raw = m[2];
-    // A bare 4-digit year (date label) is not a metric claim.
-    if (YEAR_RE.test(raw.replace(/[,.].*$/, ""))) continue;
+    if (YEAR_RE.test(raw.replace(/[,.].*$/, ""))) continue; // a bare 4-digit year (date label) is not a metric claim
     let value = parseFloat(raw.replace(/,/g, ""));
     if (Number.isNaN(value)) continue;
-    // Scale a trailing k/M/B suffix into the value before whitelist-matching, so a
-    // fabricated scaled figure can't pass on a coincidental mantissa collision (#9).
     const suffix = m[3];
     if (suffix) value *= SCALE[suffix.toLowerCase()];
-    // Unit from the surface markers: "%" => percent, else "$" => dollar, else bare. A $/%
-    // token must match a value of the SAME unit (#37); a bare token matches any unit.
     const unit: Unit = m[4] === "%" ? "percent" : m[1] === "$" ? "dollar" : "bare";
     if (!matchesAllowed(value, allowed, unit)) offending.push(m[0].trim());
   }
+  // #37 vacuity: scan the markdown-stripped text, NOT raw prose — `_` is a \w char so `\b` has no
+  // boundary at `_best_`, and `**` splitting a word (`b**est**`) breaks the match (review catch).
+  const flat = prose.replace(/[*_]+/g, "");
+  const claims = [...new Set([...flat.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
+  return { ok: offending.length === 0 && claims.length === 0, offending, claims };
+}
+
+/** Dashboard insights gate: the generic number/claim core against the DASHBOARD whitelist, PLUS
+ *  the model_mix swap-binding pass (#24/#27). Every $/%/count must trace to a dashboard aggregate
+ *  and no model-version share may be misattributed. */
+export function validateInsightNumbers(prose: string, data: DashboardData): ValidationResult {
+  const base = validateNumbersAgainst(prose, allowedNumbersTyped(data));
+  const offending = [...base.offending];
 
   // --- #24 PCN first cut: catch a SWAPPED model_mix version share. ---
   // The whitelist scan above only asks "is this value a valid share SOMEWHERE?", so a
@@ -199,15 +212,55 @@ export function validateInsightNumbers(prose: string, data: DashboardData): Vali
     // when emitted (forcing a tag on every % would break the zero-tags fail-open passthrough).
   }
 
-  // --- #37 vacuity: forbidden superlative / comparison / causal phrases (HARD RULES 2 & 5). ---
-  // The number scan owns fabrication; this owns value judgments the data cannot support —
-  // even a superlative WITH a valid number ("Best week ever — $12,679.22!") is rejected.
-  // Scan the markdown-stripped `flat` (computed above), NOT raw prose: `_` is a \w char so
-  // `\b` has no boundary at `_best_`, and `**` splitting a word (`b**est**`) breaks the match —
-  // either would let an emphasised superlative evade the gate (review-panel catch).
-  const claims = [...new Set([...flat.matchAll(CLAIM_RE)].map((m) => m[0].trim()))];
+  // The #37 vacuity (superlative/comparison/causal) gate already ran inside validateNumbersAgainst
+  // on the same markdown-stripped text — reuse its claims here (the PCN pass only adds offending).
+  return { ok: offending.length === 0 && base.claims.length === 0, offending, claims: base.claims };
+}
 
-  return { ok: offending.length === 0 && claims.length === 0, offending, claims };
+/* ============================================================================
+ * #52 — per-session takeaway whitelist + gate. A session's AI takeaway may cite ONLY that
+ * session's own measured/estimated figures (its time split, cost breakdown, cache, tokens) —
+ * a number from any OTHER session is fabrication for THIS one. Per-session grounding (not the
+ * corpus aggregate) is the whole point: it is what makes the gate non-vacuous at session scope.
+ * One model per session ⇒ no model_mix swap surface, so the gate is the generic core only.
+ * ========================================================================== */
+
+/** Every citable number of ONE session, unit-tagged. Durations are in MINUTES (the request asks
+ *  the agent to cite minutes); shares/percents and dollar figures are tagged so a fabricated 50%
+ *  can't pass on a $50 line. Includes the derived active-share % (the template's headline) and
+ *  per-cost-category $ / cost% / token% so an AI takeaway can say what the template says. */
+export function allowedNumbersSessionTyped(s: SessionDetailData): AllowedNumber[] {
+  const D = (value: number): AllowedNumber => ({ value, unit: "dollar" });
+  const P = (value: number): AllowedNumber => ({ value, unit: "percent" });
+  const N = (value: number): AllowedNumber => ({ value, unit: "bare" }); // minutes / tokens / counts
+  const { time: t, tokens: tk, cost: c } = s;
+  const ab = t.active_breakdown;
+  const out: AllowedNumber[] = [
+    D(s.cost_usd),
+    P(s.cache_pct),
+    N(t.wall_clock_min), N(t.active_min), N(t.idle_min), N(t.wait_min),
+    N(ab.thinking_min), N(ab.tool_min), N(ab.subagent_min), N(ab.planning_min),
+    N(tk.fresh_input), N(tk.output), N(tk.cache_write), N(tk.cache_read), N(tk.total),
+    P(tk.cache_hit_pct),
+    D(c.total_usd), D(c.main_loop_usd), D(c.subagent_usd),
+    D(c.cache_savings_usd), D(c.cache_write_premium_usd), D(c.blended_per_mtok_usd),
+  ];
+  // Derived active share of wall-clock — the Takeaway's headline "(X%) was real compute".
+  if (t.wall_clock_min > 0) out.push(P((t.active_min / t.wall_clock_min) * 100));
+  // Per-category cost + token shares (the "cache reads were X% of the bill" line).
+  if (c.by_category) for (const cat of Object.values(c.by_category)) out.push(D(cat.usd), P(cat.cost_pct), P(cat.tok_pct));
+  return out;
+}
+
+/** Flat number[] of one session's citable values — for the request file's "citable numbers" line. */
+export function allowedNumbersSession(s: SessionDetailData): number[] {
+  return allowedNumbersSessionTyped(s).map((a) => a.value);
+}
+
+/** Per-session no-fabrication + no-superlative gate (#52). Same core as the dashboard insights
+ *  gate, against THIS session's own whitelist; no model_mix PCN binding (a session has one model). */
+export function validateSessionTakeaway(prose: string, s: SessionDetailData): ValidationResult {
+  return validateNumbersAgainst(prose, allowedNumbersSessionTyped(s));
 }
 
 /* ============================================================================

@@ -36,7 +36,9 @@ export type { BurnTier, BurnBands } from "../shared/burnTier";
 export { burnTier } from "../shared/burnTier";
 
 /* --- markdown: bold (**x**) + "- " bullet lists, matching prototype md() --- */
-function mdInline(s: string): string {
+/** HTML-escape then re-introduce <strong> for **…** — the inline subset, also reused by the
+ *  per-session Takeaway (#52) to render a one-sentence AI takeaway safely (no raw HTML). */
+export function mdInline(s: string): string {
   // escape HTML, then re-introduce <strong> for **...**
   const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return esc.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
