@@ -24,6 +24,26 @@ version control.
 The shipped fixtures under `src/fixtures/` are **illustrative sample data**, not real
 usage — they're only the fallback the UI renders before you run `pnpm generate`.
 
+## Pricing limitations
+
+Costs are recomputed from raw-transcript token counts at per-model list rates
+(see `scripts/lib/pricing.ts`) — always an **estimate**; the Anthropic billing
+dashboard is authoritative. Known unmodeled cases: the **1M-context-window
+premium** and the **fast-mode premium** are not in the rate table, so sessions
+that used them are priced at standard rates. As a mitigation, any session whose
+per-turn context peaked above the standard **200k window** carries a
+`pricing_note` caveat (on both the session row and the detail page data) stating
+that its cost may be an underestimate — the flag is data-derived, never guessed.
+
+## Ecosystem
+
+Sibling projects by the same author that Token Torch pairs with:
+
+- [context-police](https://github.com/wan-huiyan/context-police) — audits the always-injected skill/plugin catalog; **already integrated**: Token Torch reads its snapshots for the Catalog Savings panel (`catalogSnapshot.ts` / `catalogSavings.ts`).
+- [memory-hygiene](https://github.com/wan-huiyan/memory-hygiene) — keeps agent memory files lean and current so stale notes don't pollute context.
+- [session-handoff](https://github.com/wan-huiyan/session-handoff) — structured handoff notes for continuing work across Claude Code sessions.
+- [claude-ecosystem-hygiene](https://github.com/wan-huiyan/claude-ecosystem-hygiene) — the plugin-marketplace bundle packaging these hygiene tools together.
+
 ## ✨ Generate AI insights with your own agent (no API key)
 
 Token Torch's "insights" note can be written by **the coding agent you're already in** —
