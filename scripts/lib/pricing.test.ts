@@ -8,6 +8,8 @@ import {
   buildByCategory,
   buildByCategoryPerModel,
   deriveModelRates,
+  contextWindowNote,
+  STANDARD_CONTEXT_WINDOW,
   type Rates,
 } from "./pricing";
 import { readFileSync } from "node:fs";
@@ -142,6 +144,24 @@ check("live snapshot keeps the validated headline rates (Opus stays $5/MTok)", (
   // upstream drifts, the guard keeps the literal, so this asserts MODEL_RATES, not raw snapshot numbers.
   assert.equal(MODEL_RATES.opus.fresh_input, 5);
   assert.equal(ratesForModel("claude-opus-4-8").fresh_input, 5);
+});
+
+// --- >200k-context mispricing caveat (1M-context / fast-mode premiums unmodeled) ---
+check("contextWindowNote: at/below the 200k standard window → undefined (honest omit)", () => {
+  assert.equal(contextWindowNote(0), undefined);
+  assert.equal(contextWindowNote(150_000), undefined);
+  assert.equal(contextWindowNote(STANDARD_CONTEXT_WINDOW), undefined); // boundary is inclusive-safe
+});
+check("contextWindowNote: above 200k → caveat naming the peak, the window, and the underestimate risk", () => {
+  const note = contextWindowNote(412_345)!;
+  assert.ok(note.includes("~412k"), "carries the rounded peak");
+  assert.ok(note.includes("200k standard window"), "names the standard window");
+  assert.ok(note.includes("1M-context"), "names the unmodeled premium");
+  assert.ok(note.includes("fast-mode"), "names the fast-mode premium");
+  assert.ok(note.toLowerCase().includes("underestimate"), "states the direction of the error");
+});
+check("contextWindowNote: just past the boundary still flags", () => {
+  assert.equal(typeof contextWindowNote(STANDARD_CONTEXT_WINDOW + 1), "string");
 });
 
 console.log(`\n${passed} pricing checks passed`);
