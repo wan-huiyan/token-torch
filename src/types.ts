@@ -228,6 +228,10 @@ export interface SessionRow {
   model: Model;
   fidelity: Fidelity; // "main_loop" => show amber badge
   reconciliation_note?: string; // optional ⓘ note when records disagreed
+  /** optional mispricing caveat: peak per-turn context exceeded the standard 200k
+   *  window, so the unmodeled 1M-context/fast-mode premium may apply (cost is
+   *  plausibly an underestimate). Present ⟺ the threshold was crossed (honest omit). */
+  pricing_note?: string;
   /** Plan 3 slice dimensions — all optional → additive; old fixtures stay valid. */
   model_version?: string; // dominant raw version id, e.g. "claude-opus-4-8"
   model_versions?: Record<string, number>; // per-version assistant-message share (mixed sessions)
@@ -334,6 +338,10 @@ export interface SessionDetailData {
 
   shipped?: Shipped; // optional "what shipped" section
   reconciliation_note?: string; // ⓘ note when the overlay record disagreed with recomputed cost
+  /** mispricing caveat mirroring SessionRow.pricing_note (lockstep): peak context
+   *  exceeded the standard 200k window → unmodeled 1M-context/fast-mode premium
+   *  may apply. Absent when the threshold was never crossed (honest omit). */
+  pricing_note?: string;
   /** Plan 3 slice dimensions — optional/additive, mirror SessionRow. */
   model_version?: string;
   effort?: EffortTag;

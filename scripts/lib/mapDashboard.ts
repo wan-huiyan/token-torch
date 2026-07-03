@@ -9,7 +9,7 @@ import { mapJsonlDetail } from "./mapSessionDetail";
 import type { SessionRecord } from "./ingest";
 import { normalizeProject } from "./projects";
 import { buildFlags, buildInsightsMd } from "./insights";
-import { round2 } from "./pricing";
+import { round2, contextWindowNote } from "./pricing";
 import { deriveEffort, type SettingsFacts } from "./effort";
 import { deriveModelVersion } from "./slice";
 import { buildSubagentIndex, extractFromJsonl, extractShipped, defaultProjectsDir } from "./jsonl";
@@ -193,6 +193,11 @@ export function mapDashboard(
     const detail = mapJsonlDetail(rec, fb, shipped);
     const note = ov ? overlayReconciliationNote(ov, detail.cost.total_usd) : undefined;
     if (note) detail.reconciliation_note = note;
+    // mispricing caveat: peak per-turn context above the standard 200k window means
+    // the unmodeled 1M-context/fast-mode premium plausibly applied — the session's
+    // cost carries the caveat (row + detail in lockstep, like reconciliation_note).
+    const pricing_note = contextWindowNote(rec.peakContextTokens);
+    if (pricing_note) detail.pricing_note = pricing_note;
 
     // ---- slice dimensions (Plan 3): compute ONCE, assign to BOTH detail + row ----
     // (keeping them in lockstep is the L9 trap — a divergent copy passes tests but
@@ -272,6 +277,7 @@ export function mapDashboard(
       model: rec.dominantModel,
       fidelity: detail.fidelity,
       ...(note ? { reconciliation_note: note } : {}),
+      ...(pricing_note ? { pricing_note } : {}),
       ...(model_version ? { model_version } : {}),
       model_versions,
       effort,
