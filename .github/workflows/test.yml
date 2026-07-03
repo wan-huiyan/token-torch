@@ -1,0 +1,31 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # package.json has no "packageManager" field, so pin a major here.
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      # NOTE: `pnpm generate:verify` (the honesty-invariant gate) is deliberately
+      # NOT run here: it ingests a real local corpus from ~/.claude/projects (the
+      # transcripts dir has no env/CLI override — CORPUS_DIR only points at the
+      # usage-tracking overlay), so there is no way to feed it a committed fixture
+      # corpus in CI without upstream changes to scripts/generate.ts.
