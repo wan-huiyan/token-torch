@@ -116,4 +116,22 @@ check("mapDashboard bakes insights_source from the explicit discriminator", () =
   assert.equal(tmpl.dashboard.insights_source, "template");
 });
 
+check("pricing_note present on row + detail when peak context exceeds 200k; absent otherwise", () => {
+  const heavy = baseRec({ id: "pc000001", peakContextTokens: 250_000 });
+  const light = baseRec({ id: "pc000002", peakContextTokens: 180_000 });
+  const { dashboard, details } = mapDashboard([heavy, light], new Map(), "2026-06-03T00:00:00.000Z", floor, emptyDir, settings);
+
+  const heavyRow = dashboard.sessions.find((r) => r.id === "pc000001")!;
+  const heavyDetail = details.find((d) => d.id === "pc000001")!;
+  assert.ok(heavyRow.pricing_note?.includes("1M-context"), "row carries the >200k mispricing caveat");
+  // detail mirrors the row (lockstep — no drift)
+  assert.equal(heavyDetail.pricing_note, heavyRow.pricing_note);
+
+  // below the threshold the field is OMITTED, never empty-string/zero-filled (honest omit)
+  const lightRow = dashboard.sessions.find((r) => r.id === "pc000002")!;
+  const lightDetail = details.find((d) => d.id === "pc000002")!;
+  assert.ok(!("pricing_note" in lightRow), "row omits pricing_note at/below 200k");
+  assert.equal(lightDetail.pricing_note, undefined);
+});
+
 console.log(`\n${passed} mapDashboard.slice checks passed`);

@@ -35,8 +35,9 @@ export type ModelFamily = "opus" | "sonnet" | "haiku";
  * (verified vs platform.claude.com/docs 2026-05-29): Opus 4.5+ (incl. 4.7 & 4.8)
  * in=$5/out=$25 · Sonnet 4.x in=$3/out=$15 · Haiku 4.5 in=$1/out=$5 per MTok.
  * Rule for every family: cache_write = 1.25× input, cache_read = 0.1× input.
- * NOT modeled (per corpus caveat): the 1M-context window (billed at standard
- * per-token rates for current models), fast-mode premium, Opus-4.7+ tokenizer change.
+ * NOT modeled (per corpus caveat): 1M-context-window premium pricing, fast-mode
+ * premium, Opus-4.7+ tokenizer change. Sessions whose context plausibly exceeded
+ * the standard window carry a per-session caveat — see contextWindowNote below.
  */
 /** Hardcoded $/MTok literal — the drift baseline AND the fallback when the
  *  bundled LiteLLM snapshot is missing/absent/drifted for a family. */
@@ -135,6 +136,25 @@ export function familyOf(modelId: string): ModelFamily | null {
  */
 export function ratesForModel(modelId: string): Rates {
   return MODEL_RATES[familyOf(modelId) ?? "opus"];
+}
+
+/** Standard context window (tokens). A per-turn context above this means the
+ *  session plausibly ran on the 1M-context window (and/or fast mode), whose
+ *  pricing premiums are NOT in the rate table above. */
+export const STANDARD_CONTEXT_WINDOW = 200_000;
+
+/** Per-session mispricing caveat (honest omit): when a session's heaviest turn
+ *  carried more input context (fresh_input + cache_read + cache_write) than the
+ *  standard 200k window, its rates were plausibly the unmodeled 1M-context (or
+ *  fast-mode) premium tier — the recomputed cost may UNDERESTIMATE. Returns
+ *  undefined at/below the threshold, so callers omit the field entirely. */
+export function contextWindowNote(peakContextTokens: number): string | undefined {
+  if (peakContextTokens <= STANDARD_CONTEXT_WINDOW) return undefined;
+  return (
+    `This session's context peaked at ~${Math.round(peakContextTokens / 1000)}k tokens — above the ` +
+    `${STANDARD_CONTEXT_WINDOW / 1000}k standard window, so it plausibly ran on the 1M-context window. ` +
+    `1M-context and fast-mode pricing premiums are not modeled, so the shown cost may be an underestimate.`
+  );
 }
 
 export const PRICING_BASIS =
